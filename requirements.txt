@@ -3,3 +3,6 @@ Django==5.2.5
 django-htmx==1.23.2
 sqlparse==0.5.3
 tzdata==2025.2
+django-crispy-forms
+crispy-tailwind
+python-dotenv
