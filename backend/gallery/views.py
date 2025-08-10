@@ -13,7 +13,8 @@ from .serializers import (
     GallerySerializer, PhotoSerializer, AssignClientsSerializer,
     GalleryRecursiveSerializer, GalleryCreateSerializer, GalleryShareSerializer,
     PhotoShareSerializer, AddToGallerySerializer, PublicGallerySerializer,
-    GalleryListSerializer, UserGalleriesSerializer, PhotoCreateSerializer
+    GalleryListSerializer, UserGalleriesSerializer, PhotoCreateSerializer,
+    GalleryVisibilitySerializer, PhotoVisibilitySerializer, ShareLinkToggleSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 
@@ -40,10 +41,10 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
         
         # Write permissions only for owners
-        if hasattr(obj, 'photographer'):
-            return obj.photographer.user == request.user
+        if hasattr(obj, 'user'):
+            return obj.user == request.user
         elif hasattr(obj, 'gallery'):
-            return obj.gallery.photographer.user == request.user
+            return obj.gallery.user == request.user
         return False
 
 
@@ -53,19 +54,19 @@ class GalleryCreateView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        photographer = self.request.user.photographer
+        user = self.request.user
         parent_gallery_id = self.request.data.get("parent_gallery")
         parent_gallery = None
 
         if parent_gallery_id:
             parent_gallery = get_object_or_404(Gallery, id=parent_gallery_id)
-            if parent_gallery.photographer.user != self.request.user:
-                raise PermissionDenied("You cannot add a sub-gallery to another photographer's gallery.")
+            if parent_gallery.user != self.request.user:
+                raise PermissionDenied("You cannot add a sub-gallery to another user's gallery.")
 
-        serializer.save(photographer=photographer, parent_gallery=parent_gallery)
+        serializer.save(user=user, parent_gallery=parent_gallery)
 
 
-# ---- SHARING VIEWS ----
+# ---- SHARING VIEWS (Updated) ----
 class GalleryShareView(APIView):
     """Update gallery sharing settings."""
     permission_classes = [IsAuthenticated]
@@ -73,7 +74,7 @@ class GalleryShareView(APIView):
     def patch(self, request, gallery_id):
         gallery = get_object_or_404(Gallery, id=gallery_id)
         
-        if gallery.photographer.user != request.user:
+        if gallery.user != request.user:
             raise PermissionDenied("Only the gallery owner can change sharing settings.")
         
         serializer = GalleryShareSerializer(gallery, data=request.data, partial=True)
@@ -82,7 +83,8 @@ class GalleryShareView(APIView):
         
         return Response({
             "detail": "Gallery sharing settings updated.",
-            "sharing_status": gallery.sharing_status,
+            "visibility": gallery.visibility,
+            "is_shareable_via_link": gallery.is_shareable_via_link,
             "share_url": gallery.share_url,
             "is_public": gallery.is_public
         })
@@ -95,7 +97,7 @@ class PhotoShareView(APIView):
     def patch(self, request, photo_id):
         photo = get_object_or_404(Photo, id=photo_id)
         
-        if photo.gallery.photographer.user != request.user:
+        if photo.gallery.user != request.user:
             raise PermissionDenied("Only the photo owner can change sharing settings.")
         
         serializer = PhotoShareSerializer(photo, data=request.data, partial=True)
@@ -104,19 +106,107 @@ class PhotoShareView(APIView):
         
         return Response({
             "detail": "Photo sharing settings updated.",
-            "sharing_status": photo.sharing_status,
+            "visibility": photo.visibility,
+            "is_shareable_via_link": photo.is_shareable_via_link,
             "share_url": photo.share_url,
             "is_public": photo.is_public
         })
 
 
+# ---- NEW: Separate Visibility and Link Sharing Views ----
+class GalleryVisibilityView(APIView):
+    """Update only gallery visibility (public/private)."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, gallery_id):
+        gallery = get_object_or_404(Gallery, id=gallery_id)
+        
+        if gallery.user != request.user:
+            raise PermissionDenied("Only the gallery owner can change visibility.")
+        
+        serializer = GalleryVisibilitySerializer(gallery, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response({
+            "detail": "Gallery visibility updated.",
+            "visibility": gallery.visibility,
+            "is_public": gallery.is_public
+        })
+
+
+class PhotoVisibilityView(APIView):
+    """Update only photo visibility (public/private)."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, photo_id):
+        photo = get_object_or_404(Photo, id=photo_id)
+        
+        if photo.gallery.user != request.user:
+            raise PermissionDenied("Only the photo owner can change visibility.")
+        
+        serializer = PhotoVisibilitySerializer(photo, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response({
+            "detail": "Photo visibility updated.",
+            "visibility": photo.visibility,
+            "is_public": photo.is_public
+        })
+
+
+class GalleryShareLinkView(APIView):
+    """Toggle gallery link sharing on/off."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, gallery_id):
+        gallery = get_object_or_404(Gallery, id=gallery_id)
+        
+        if gallery.user != request.user:
+            raise PermissionDenied("Only the gallery owner can change link sharing.")
+        
+        serializer = ShareLinkToggleSerializer(gallery, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response({
+            "detail": "Gallery link sharing updated.",
+            "is_shareable_via_link": gallery.is_shareable_via_link,
+            "share_url": gallery.share_url
+        })
+
+
+class PhotoShareLinkView(APIView):
+    """Toggle photo link sharing on/off."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, photo_id):
+        photo = get_object_or_404(Photo, id=photo_id)
+        
+        if photo.gallery.user != request.user:
+            raise PermissionDenied("Only the photo owner can change link sharing.")
+        
+        serializer = ShareLinkToggleSerializer(photo, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response({
+            "detail": "Photo link sharing updated.",
+            "is_shareable_via_link": photo.is_shareable_via_link,
+            "share_url": photo.share_url
+        })
+
+
+# ---- UPDATED: Shared Link Views ----
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def gallery_share_view(request, token):
     """View shared gallery via token (public access)."""
     try:
         gallery = Gallery.objects.get(share_token=token)
-        if gallery.sharing_status not in ['shareable', 'public']:
+        # Updated condition to check if sharing is enabled
+        if not gallery.is_shareable_via_link:
             raise NotFound("Gallery is not available for sharing.")
         
         serializer = GallerySerializer(gallery, context={'request': request})
@@ -131,7 +221,8 @@ def photo_share_view(request, token):
     """View shared photo via token (public access)."""
     try:
         photo = Photo.objects.get(share_token=token)
-        if photo.sharing_status not in ['shareable', 'public']:
+        # Updated condition to check if sharing is enabled
+        if not photo.is_shareable_via_link:
             raise NotFound("Photo is not available for sharing.")
         
         serializer = PhotoSerializer(photo, context={'request': request})
@@ -154,23 +245,26 @@ class AddToMyGalleryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        data = {'user': request.user}
+        data = {}  # Remove user from data
         
         if gallery_id:
             gallery = get_object_or_404(Gallery, id=gallery_id)
-            if not gallery.sharing_status in ['shareable', 'public']:
+            if not (gallery.is_public or gallery.is_shareable_via_link):
                 raise PermissionDenied("Gallery is not shareable.")
-            data['gallery'] = gallery
+            data['gallery_id'] = gallery_id
             data['access_method'] = 'public_gallery' if gallery.is_public else 'share_link'
         
         if photo_id:
             photo = get_object_or_404(Photo, id=photo_id)
-            if not photo.sharing_status in ['shareable', 'public']:
+            if not (photo.is_public or photo.is_shareable_via_link):
                 raise PermissionDenied("Photo is not shareable.")
-            data['photo'] = photo
+            data['photo_id'] = photo_id
             data['access_method'] = 'public_gallery' if photo.is_public else 'share_link'
         
-        serializer = AddToGallerySerializer(data=data)
+        print("Adding to collection with data:", data)
+        
+        # Pass context instead of user in data
+        serializer = AddToGallerySerializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         item = serializer.save()
         
@@ -182,7 +276,7 @@ class AddToMyGalleryView(APIView):
         })
 
 
-# ---- PUBLIC GALLERY VIEWS ----
+# ---- PUBLIC GALLERY VIEWS (No changes needed) ----
 class PublicGalleriesView(generics.ListAPIView):
     """List all public galleries."""
     serializer_class = PublicGallerySerializer
@@ -190,7 +284,8 @@ class PublicGalleriesView(generics.ListAPIView):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        queryset = PublicGallery.objects.select_related('gallery__photographer__user')
+        queryset = PublicGallery.objects.select_related('gallery__user')
+
         
         # Filter options
         featured_only = self.request.query_params.get('featured')
@@ -202,20 +297,20 @@ class PublicGalleriesView(generics.ListAPIView):
             queryset = queryset.filter(
                 Q(gallery__title__icontains=search) |
                 Q(gallery__description__icontains=search) |
-                Q(gallery__photographer__user__username__icontains=search)
+                Q(gallery__user__user__username__icontains=search)
             )
         
         return queryset.order_by('-featured', '-added_to_public_at')
 
 
-# ---- ASSIGN CLIENTS ----
+# ---- ASSIGN CLIENTS (No changes needed) ----
 class AssignClientsToGalleryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, gallery_id):
         gallery = get_object_or_404(Gallery, id=gallery_id)
 
-        if gallery.photographer.user != request.user:
+        if gallery.user != request.user:
             return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = AssignClientsSerializer(data=request.data)
@@ -242,7 +337,7 @@ class AssignClientsToPhotoView(APIView):
     def post(self, request, photo_id):
         photo = get_object_or_404(Photo, id=photo_id)
 
-        if photo.gallery.photographer.user != request.user:
+        if photo.gallery.user != request.user:
             return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = AssignClientsSerializer(data=request.data)
@@ -263,22 +358,25 @@ class AssignClientsToPhotoView(APIView):
         return Response({"detail": "Clients assigned to photo successfully."})
 
 
-# ---- CLIENT VIEWS (Enhanced) ----
+# ---- CLIENT VIEWS (No changes needed) ----
 class UserGalleriesView(APIView):
     """Get user's galleries organized by access type."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
+        print("User:", user)
         
-        # Owned galleries (if user is photographer)
+        # Owned galleries (if user is user)
         owned_galleries = []
-        if hasattr(user, 'photographer'):
+        if user:
             owned_galleries = Gallery.objects.filter(
-                photographer=user.photographer,
+                user=user,
                 parent_gallery__isnull=True
             )
         
+        print("Owned galleries:", owned_galleries)
+
         # Assigned galleries
         assigned_galleries = Gallery.objects.filter(assigned_clients=user)
         
@@ -328,35 +426,38 @@ class ClientAssignedPhotosView(generics.ListAPIView):
         ).distinct()
 
 
-# ---- GALLERY LIST / CREATE ----
+# ---- GALLERY LIST / CREATE (No changes needed) ----
 class GalleryListCreateView(generics.ListCreateAPIView):
     serializer_class = GalleryRecursiveSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        photographer = self.request.user.photographer
-        queryset = Gallery.objects.filter(photographer=photographer)
+        user = self.request.user
+        queryset = Gallery.objects.filter(user=user)
+        
 
         if self.request.query_params.get("top_only") == "true":
             queryset = queryset.filter(parent_gallery__isnull=True)
 
+        print("Queryset for GalleryListCreateView:", queryset)
+
         return queryset
 
     def perform_create(self, serializer):
-        photographer = self.request.user.photographer
+        user = self.request.user
         parent_gallery_id = self.request.data.get("parent_gallery")
         parent_gallery = None
 
         if parent_gallery_id:
             parent_gallery = get_object_or_404(Gallery, id=parent_gallery_id)
-            if parent_gallery.photographer.user != self.request.user:
-                raise PermissionDenied("You cannot add a sub-gallery to another photographer's gallery.")
+            if parent_gallery.user != self.request.user:
+                raise PermissionDenied("You cannot add a sub-gallery to another user's gallery.")
 
-        serializer.save(photographer=photographer, parent_gallery=parent_gallery)
+        serializer.save(user=user, parent_gallery=parent_gallery)
 
 
-# ---- PHOTO LIST / CREATE ----
+# ---- PHOTO LIST / CREATE (No changes needed) ----
 class PhotoListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -380,12 +481,12 @@ class PhotoListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         gallery_id = self.request.data.get('gallery')
         gallery = get_object_or_404(Gallery, pk=gallery_id)
-        if gallery.photographer.user != self.request.user:
+        if gallery.user != self.request.user:
             raise PermissionDenied("You do not have permission to add photos to this gallery.")
         serializer.save(gallery=gallery)
 
 
-# ---- UPDATE / DELETE ----
+# ---- UPDATE / DELETE (No changes needed) ----
 class GalleryUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Gallery.objects.all()
     serializer_class = GallerySerializer
@@ -400,12 +501,12 @@ class GalleryUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         gallery = self.get_object()
-        if gallery.photographer.user != self.request.user:
+        if gallery.user != self.request.user:
             raise PermissionDenied("You cannot edit this gallery.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.photographer.user != self.request.user:
+        if instance.user != self.request.user:
             raise PermissionDenied("You cannot delete this gallery.")
         instance.delete()
 
@@ -428,25 +529,25 @@ class PhotoUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         photo = self.get_object()
-        if photo.gallery.photographer.user != self.request.user:
+        if photo.gallery.user != self.request.user:
             raise PermissionDenied("You cannot edit this photo.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.gallery.photographer.user != self.request.user:
+        if instance.gallery.user != self.request.user:
             raise PermissionDenied("You cannot delete this photo.")
         instance.delete()
 
 
-# ---- ANALYTICS VIEWS ----
+# ---- ANALYTICS VIEWS (No changes needed) ----
 class GalleryAnalyticsView(APIView):
     """Get sharing analytics for a gallery."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, gallery_id):
         gallery = get_object_or_404(Gallery, id=gallery_id)
-        
-        if gallery.photographer.user != request.user:
+
+        if gallery.user != request.user:
             raise PermissionDenied("You can only view analytics for your own galleries.")
         
         # Get sharing statistics
@@ -469,7 +570,7 @@ class GalleryAnalyticsView(APIView):
         recent_access = access_records.select_related('user').order_by('-accessed_at')[:10]
         analytics['recent_access'] = [
             {
-                'user': record.user.username,
+                'user': record.username,
                 'method': record.get_access_method_display(),
                 'accessed_at': record.accessed_at
             }

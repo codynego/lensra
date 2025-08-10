@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import Gallery, Photo, PublicGallery, SharedAccess
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 
 User = get_user_model()
 
@@ -23,8 +25,8 @@ class PhotoSerializer(serializers.ModelSerializer):
         model = Photo
         fields = [
             "id", "image", "caption", "uploaded_at", "assigned_clients", 
-            "accessible_users", "sharing_status", "share_url", "is_public",
-            "can_share", "access_type"
+            "accessible_users", "visibility", "is_shareable_via_link", 
+            "share_url", "is_public", "can_share", "access_type"
         ]
 
     def get_can_share(self, obj):
@@ -32,7 +34,7 @@ class PhotoSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False
-        return request.user == obj.gallery.photographer.user
+        return request.user == obj.gallery.user
 
     def get_access_type(self, obj):
         """Determine how the current user has access to this photo."""
@@ -41,7 +43,7 @@ class PhotoSerializer(serializers.ModelSerializer):
             return 'public' if obj.is_public else 'anonymous'
         
         user = request.user
-        if user == obj.gallery.photographer.user:
+        if user == obj.gallery.user:
             return 'owner'
         elif obj.assigned_clients.filter(id=user.id).exists():
             return 'assigned'
@@ -56,15 +58,17 @@ class PhotoCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating photos."""
     class Meta:
         model = Photo
-        fields = ["image", "caption", "sharing_status"]
+        fields = ["image", "caption", "visibility", "is_shareable_via_link"]
 
 
 class PhotoShareSerializer(serializers.Serializer):
     """Serializer for updating photo sharing settings."""
-    sharing_status = serializers.ChoiceField(choices=Photo.SHARING_CHOICES)
+    visibility = serializers.ChoiceField(choices=Photo.VISIBILITY_CHOICES)
+    is_shareable_via_link = serializers.BooleanField()
     
     def update(self, instance, validated_data):
-        instance.sharing_status = validated_data['sharing_status']
+        instance.visibility = validated_data['visibility']
+        instance.is_shareable_via_link = validated_data['is_shareable_via_link']
         instance.save()
         return instance
 
@@ -81,7 +85,8 @@ class GalleryRecursiveSerializer(serializers.ModelSerializer):
         model = Gallery
         fields = [
             "id", "title", "description", "created_at", "photos", "sub_galleries", 
-            "assigned_clients", "accessible_users", "sharing_status", "share_url", "is_public"
+            "assigned_clients", "accessible_users", "visibility", 
+            "is_shareable_via_link", "share_url", "is_public"
         ]
 
     def get_sub_galleries(self, obj):
@@ -107,10 +112,10 @@ class GallerySerializer(serializers.ModelSerializer):
     class Meta:
         model = Gallery
         fields = [
-            "id", "photographer", "title", "description", "created_at", "photos", 
+            "id", "user", "title", "description", "created_at", "photos", 
             "sub_galleries", "assigned_clients", "accessible_users", "cover_image",
-            "sharing_status", "share_url", "is_public", "can_share", "access_type",
-            "photo_count", "is_featured"
+            "visibility", "is_shareable_via_link", "share_url", "is_public", 
+            "can_share", "access_type", "photo_count", "is_featured"
         ]
 
     def get_sub_galleries(self, obj):
@@ -128,7 +133,7 @@ class GallerySerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False
-        return request.user == obj.photographer.user
+        return request.user == obj.user
 
     def get_access_type(self, obj):
         """Determine how the current user has access to this gallery."""
@@ -137,7 +142,7 @@ class GallerySerializer(serializers.ModelSerializer):
             return 'public' if obj.is_public else 'anonymous'
         
         user = request.user
-        if user == obj.photographer.user:
+        if user == obj.user:
             return 'owner'
         elif obj.assigned_clients.filter(id=user.id).exists():
             return 'assigned'
@@ -167,19 +172,21 @@ class GalleryCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating a new gallery or sub-gallery."""
     class Meta:
         model = Gallery
-        fields = ["title", "description", "parent_gallery", "sharing_status"]
+        fields = ["title", "description", "parent_gallery", "visibility", "is_shareable_via_link"]
 
 
 class GalleryShareSerializer(serializers.Serializer):
     """Serializer for updating gallery sharing settings."""
-    sharing_status = serializers.ChoiceField(choices=Gallery.SHARING_CHOICES)
+    visibility = serializers.ChoiceField(choices=Gallery.VISIBILITY_CHOICES)
+    is_shareable_via_link = serializers.BooleanField()
     
     def update(self, instance, validated_data):
-        instance.sharing_status = validated_data['sharing_status']
+        instance.visibility = validated_data['visibility']
+        instance.is_shareable_via_link = validated_data['is_shareable_via_link']
         instance.save()
         
         # Handle public gallery listing
-        if validated_data['sharing_status'] == 'public':
+        if validated_data['visibility'] == 'public':
             PublicGallery.objects.get_or_create(gallery=instance)
         elif hasattr(instance, 'public_listing'):
             instance.public_listing.delete()
@@ -188,41 +195,114 @@ class GalleryShareSerializer(serializers.Serializer):
 
 
 class AddToGallerySerializer(serializers.Serializer):
-    """Serializer for adding shared galleries/photos to user's accessible list."""
+    gallery_id = serializers.IntegerField(required=False)
+    photo_id = serializers.IntegerField(required=False)
+    access_method = serializers.CharField(default='share_link', required=False)
+
+    def validate(self, data):
+        if not data.get('gallery_id') and not data.get('photo_id'):
+            raise serializers.ValidationError("Either gallery_id or photo_id must be provided.")
+        if data.get('gallery_id') and data.get('photo_id'):
+            raise serializers.ValidationError("Provide only one of gallery_id or photo_id.")
+        return data
+
     def create(self, validated_data):
-        user = validated_data['user']
-        gallery = validated_data.get('gallery')
-        photo = validated_data.get('photo')
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("User must be authenticated to add to collection.")
+
+        gallery_id = validated_data.get('gallery_id')
+        photo_id = validated_data.get('photo_id')
         access_method = validated_data.get('access_method', 'share_link')
-        
-        if gallery:
-            gallery.add_user_access(user)
-            SharedAccess.objects.get_or_create(
-                user=user,
-                gallery=gallery,
-                defaults={'access_method': access_method}
-            )
-            return gallery
-        elif photo:
-            photo.add_user_access(user)
-            SharedAccess.objects.get_or_create(
-                user=user,
-                photo=photo,
-                defaults={'access_method': access_method}
-            )
-            return photo
-        
-        raise serializers.ValidationError("Either gallery or photo must be provided")
+
+        if gallery_id:
+            try:
+                original_gallery = Gallery.objects.get(id=gallery_id)
+
+                # 1. Ensure "Shared Photos" gallery exists for this user
+                shared_gallery, _ = Gallery.objects.get_or_create(
+                    user=user,
+                    title="Shared Photos",
+                    defaults={'is_virtual': True}
+                )
+
+                # 2. Duplicate each photo from the original gallery into Shared Photos
+                for photo in original_gallery.photos.all():
+                    new_photo = Photo.objects.get(id=photo.id)  # get fresh instance
+
+                    new_photo.pk = None  # create a clone
+                    new_photo.gallery = shared_gallery
+                    if hasattr(new_photo, "original_photo"):
+                        new_photo.original_photo = photo
+                    new_photo.save()
+
+                    # grant user access to their copy
+                    new_photo.add_user_access(user)
+
+                    # track the share
+                    SharedAccess.objects.get_or_create(
+                        user=user,
+                        photo=new_photo,
+                        defaults={'access_method': access_method}
+                    )
+
+                # 3. Optionally record that user has access to original gallery (optional)
+                SharedAccess.objects.get_or_create(
+                    user=user,
+                    gallery=original_gallery,
+                    defaults={'access_method': access_method}
+                )
+
+                return shared_gallery
+
+            except Gallery.DoesNotExist:
+                raise serializers.ValidationError("Gallery not found.")
+
+
+        elif photo_id:
+            try:
+                photo = Photo.objects.get(id=photo_id)
+
+                # 1. Ensure "Shared Photos" gallery exists for this user
+                shared_gallery, _ = Gallery.objects.get_or_create(
+                    user=user,
+                    title="Shared Photos",
+                    defaults={'is_virtual': True}
+                )
+
+                # 2. Duplicate the photo
+                photo.pk = None  # Reset primary key so Django treats it as a new object
+                photo.gallery = shared_gallery  # Assign to the user's shared gallery
+                photo.save()
+
+                # 3. Grant the user access to *their* copy
+                photo.add_user_access(user)
+
+                # 4. Track that this is from a share
+                SharedAccess.objects.get_or_create(
+                    user=user,
+                    photo=photo,
+                    defaults={'access_method': access_method}
+                )
+
+                return photo
+
+            except Photo.DoesNotExist:
+                raise serializers.ValidationError("Photo not found.")
+
+
+        raise serializers.ValidationError("Either gallery or photo must be provided.")
 
 
 class PublicGallerySerializer(serializers.ModelSerializer):
     """Serializer for public gallery listings."""
     gallery = GallerySerializer(read_only=True)
-    photographer_name = serializers.CharField(source='gallery.photographer.user.username', read_only=True)
+    user_name = serializers.CharField(source='gallery.user.username', read_only=True)
     
     class Meta:
         model = PublicGallery
-        fields = ["gallery", "featured", "added_to_public_at", "photographer_name"]
+        fields = ["gallery", "featured", "added_to_public_at", "user_name"]
 
 
 class SharedAccessSerializer(serializers.ModelSerializer):
@@ -257,15 +337,15 @@ class GalleryListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for gallery listings (without nested data)."""
     cover_image = serializers.SerializerMethodField()
     photo_count = serializers.SerializerMethodField()
-    photographer_name = serializers.CharField(source='photographer.user.username', read_only=True)
+    user_name = serializers.CharField(source='user.username', read_only=True)
     access_type = serializers.SerializerMethodField()
     
     class Meta:
         model = Gallery
         fields = [
             "id", "title", "description", "created_at", "cover_image", 
-            "photo_count", "photographer_name", "sharing_status", "is_public", 
-            "access_type"
+            "photo_count", "user_name", "visibility", 
+            "is_shareable_via_link", "is_public", "access_type"
         ]
     
     def get_cover_image(self, obj):
@@ -280,7 +360,7 @@ class GalleryListSerializer(serializers.ModelSerializer):
             return 'public' if obj.is_public else 'anonymous'
         
         user = request.user
-        if user == obj.photographer.user:
+        if user == obj.user:
             return 'owner'
         elif obj.assigned_clients.filter(id=user.id).exists():
             return 'assigned'
@@ -296,3 +376,42 @@ class UserGalleriesSerializer(serializers.Serializer):
     owned_galleries = GalleryListSerializer(many=True, read_only=True)
     assigned_galleries = GalleryListSerializer(many=True, read_only=True)
     shared_galleries = GalleryListSerializer(many=True, read_only=True)
+
+
+# Additional convenience serializers for the new structure
+
+class GalleryVisibilitySerializer(serializers.Serializer):
+    """Simple serializer for just updating visibility without sharing settings."""
+    visibility = serializers.ChoiceField(choices=Gallery.VISIBILITY_CHOICES)
+    
+    def update(self, instance, validated_data):
+        instance.visibility = validated_data['visibility']
+        instance.save()
+        
+        # Handle public gallery listing
+        if validated_data['visibility'] == 'public':
+            PublicGallery.objects.get_or_create(gallery=instance)
+        elif hasattr(instance, 'public_listing'):
+            instance.public_listing.delete()
+        
+        return instance
+
+
+class PhotoVisibilitySerializer(serializers.Serializer):
+    """Simple serializer for just updating photo visibility without sharing settings."""
+    visibility = serializers.ChoiceField(choices=Photo.VISIBILITY_CHOICES)
+    
+    def update(self, instance, validated_data):
+        instance.visibility = validated_data['visibility']
+        instance.save()
+        return instance
+
+
+class ShareLinkToggleSerializer(serializers.Serializer):
+    """Serializer for toggling share link functionality only."""
+    is_shareable_via_link = serializers.BooleanField()
+    
+    def update(self, instance, validated_data):
+        instance.is_shareable_via_link = validated_data['is_shareable_via_link']
+        instance.save()
+        return instance

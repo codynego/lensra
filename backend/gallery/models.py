@@ -1,19 +1,17 @@
 from django.db import models
 from django.conf import settings
 from django.utils.crypto import get_random_string
-from photographers.models import Photographer
 
 User = settings.AUTH_USER_MODEL
 
 class Gallery(models.Model):
-    SHARING_CHOICES = [
+    VISIBILITY_CHOICES = [
         ('private', 'Private'),
-        ('shareable', 'Shareable via Link'),
         ('public', 'Public Gallery'),
     ]
     
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name='galleries'
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='galleries'
     )
     assigned_clients = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='assigned_galleries', blank=True
@@ -31,11 +29,19 @@ class Gallery(models.Model):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    sharing_status = models.CharField(
+    
+    # Separate visibility and sharing controls
+    visibility = models.CharField(
         max_length=20, 
-        choices=SHARING_CHOICES, 
-        default='private'
+        choices=VISIBILITY_CHOICES, 
+        default='private',
+        help_text="Controls who can discover and view this gallery"
     )
+    is_shareable_via_link = models.BooleanField(
+        default=False,
+        help_text="Allow sharing this gallery via a unique link"
+    )
+    
     # Unique share token for generating shareable URLs
     share_token = models.CharField(
         max_length=32, 
@@ -43,18 +49,22 @@ class Gallery(models.Model):
         blank=True, 
         null=True
     )
-    is_public = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         # Generate share token if sharing is enabled and token doesn't exist
-        if self.sharing_status in ['shareable', 'public'] and not self.share_token:
+        if self.is_shareable_via_link and not self.share_token:
             self.share_token = get_random_string(32)
-        
-        # Set is_public based on sharing_status
-        self.is_public = (self.sharing_status == 'public')
+        # Clear share token if sharing is disabled
+        elif not self.is_shareable_via_link:
+            self.share_token = None
         
         super().save(*args, **kwargs)
+
+    @property
+    def is_public(self):
+        """Helper property for backward compatibility and clarity."""
+        return self.visibility == 'public'
 
     @property
     def cover_photo(self):
@@ -65,9 +75,9 @@ class Gallery(models.Model):
     @property
     def share_url(self):
         """Returns the shareable URL if sharing is enabled."""
-        if self.share_token and self.sharing_status in ['shareable', 'public']:
+        if self.share_token and self.is_shareable_via_link:
             from django.urls import reverse
-            return reverse('gallery_share', kwargs={'token': self.share_token})
+            return reverse('gallery-share', kwargs={'token': self.share_token})
         return None
 
     def add_user_access(self, user):
@@ -77,24 +87,25 @@ class Gallery(models.Model):
 
     def can_user_access(self, user):
         """Check if a user can access this gallery."""
+        # Public galleries are accessible to everyone
         if self.is_public:
             return True
+        
         if user.is_authenticated:
             return (
-                user == self.photographer.user or
+                user == self.user or
                 self.assigned_clients.filter(id=user.id).exists() or
                 self.accessible_users.filter(id=user.id).exists()
             )
         return False
 
     def __str__(self):
-        return f"{self.title} by {self.photographer.user.username}"
+        return f"{self.title} by {self.user.username}"
 
 
 class Photo(models.Model):
-    SHARING_CHOICES = [
+    VISIBILITY_CHOICES = [
         ('private', 'Private'),
-        ('shareable', 'Shareable via Link'),
         ('public', 'Public Photo'),
     ]
     
@@ -110,11 +121,19 @@ class Photo(models.Model):
     )
     image = models.ImageField(upload_to='gallery_photos/')
     caption = models.CharField(max_length=255, blank=True, null=True)
-    sharing_status = models.CharField(
+    
+    # Separate visibility and sharing controls
+    visibility = models.CharField(
         max_length=20, 
-        choices=SHARING_CHOICES, 
-        default='private'
+        choices=VISIBILITY_CHOICES, 
+        default='private',
+        help_text="Controls who can discover and view this photo"
     )
+    is_shareable_via_link = models.BooleanField(
+        default=False,
+        help_text="Allow sharing this photo via a unique link"
+    )
+    
     # Unique share token for generating shareable URLs
     share_token = models.CharField(
         max_length=32, 
@@ -122,25 +141,29 @@ class Photo(models.Model):
         blank=True, 
         null=True
     )
-    is_public = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         # Generate share token if sharing is enabled and token doesn't exist
-        if self.sharing_status in ['shareable', 'public'] and not self.share_token:
+        if self.is_shareable_via_link and not self.share_token:
             self.share_token = get_random_string(32)
-        
-        # Set is_public based on sharing_status
-        self.is_public = (self.sharing_status == 'public')
+        # Clear share token if sharing is disabled
+        elif not self.is_shareable_via_link:
+            self.share_token = None
         
         super().save(*args, **kwargs)
 
     @property
+    def is_public(self):
+        """Helper property for backward compatibility and clarity."""
+        return self.visibility == 'public'
+
+    @property
     def share_url(self):
         """Returns the shareable URL if sharing is enabled."""
-        if self.share_token and self.sharing_status in ['shareable', 'public']:
+        if self.share_token and self.is_shareable_via_link:
             from django.urls import reverse
-            return reverse('photo_share', kwargs={'token': self.share_token})
+            return reverse('photo-share', kwargs={'token': self.share_token})
         return None
 
     def add_user_access(self, user):
@@ -150,11 +173,13 @@ class Photo(models.Model):
 
     def can_user_access(self, user):
         """Check if a user can access this photo."""
+        # Public photos are accessible to everyone
         if self.is_public:
             return True
+        
         if user.is_authenticated:
             return (
-                user == self.gallery.photographer.user or
+                user == self.gallery.user or
                 self.assigned_clients.filter(id=user.id).exists() or
                 self.accessible_users.filter(id=user.id).exists() or
                 self.gallery.can_user_access(user)  # Inherit gallery access
@@ -218,4 +243,4 @@ class SharedAccess(models.Model):
     
     def __str__(self):
         item = self.gallery or self.photo
-        return f"{self.user.username} - {item} ({self.access_method})"
+        return f"{self.username} - {item} ({self.access_method})"

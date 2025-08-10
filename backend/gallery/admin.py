@@ -3,9 +3,9 @@ from .models import Gallery, Photo
 
 @admin.register(Gallery)
 class GalleryAdmin(admin.ModelAdmin):
-    list_display = ('title', 'photographer', 'created_at')
-    list_filter = ('created_at', 'photographer')
-    search_fields = ('title', 'photographer__user__username')
+    list_display = ('title', 'user', 'created_at')
+    list_filter = ('created_at', 'user')
+    search_fields = ('title', 'user__username')
     ordering = ('-created_at',)
     filter_horizontal = ('assigned_clients',)  # If you want a nicer widget for many-to-many
 
