@@ -1,7 +1,14 @@
+APScheduler==3.11.0
 asgiref==3.9.1
 Django==5.2.5
+django-cors-headers==4.7.0
+django-htmx==1.23.2
 djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
 dotenv==0.9.9
+pillow==11.3.0
+PyJWT==2.10.1
 python-dotenv==1.1.1
 sqlparse==0.5.3
 tzdata==2025.2
+tzlocal==5.3.1
