@@ -224,30 +224,43 @@ class AddToGallerySerializer(serializers.Serializer):
                 shared_gallery, _ = Gallery.objects.get_or_create(
                     user=user,
                     title="Shared Photos",
-                    defaults={'is_virtual': True}
+                    defaults={
+                        'description': 'Photos shared with me from other galleries',
+                        'visibility': 'private'
+                    }
                 )
 
                 # 2. Duplicate each photo from the original gallery into Shared Photos
                 for photo in original_gallery.photos.all():
-                    new_photo = Photo.objects.get(id=photo.id)  # get fresh instance
+                    # Check if this photo is already in the user's shared gallery
+                    existing_photo = Photo.objects.filter(
+                        gallery=shared_gallery,
+                        caption=photo.caption,
+                        image=photo.image.name
+                    ).first()
+                    
+                    if not existing_photo:
+                        # Create a new photo instance (duplicate)
+                        new_photo = Photo(
+                            gallery=shared_gallery,
+                            image=photo.image,
+                            caption=photo.caption,
+                            visibility=photo.visibility,
+                            is_shareable_via_link=photo.is_shareable_via_link
+                        )
+                        new_photo.save()
+                        
+                        # Grant user access to their copy
+                        new_photo.add_user_access(user)
 
-                    new_photo.pk = None  # create a clone
-                    new_photo.gallery = shared_gallery
-                    if hasattr(new_photo, "original_photo"):
-                        new_photo.original_photo = photo
-                    new_photo.save()
+                        # Track the share
+                        SharedAccess.objects.get_or_create(
+                            user=user,
+                            photo=new_photo,
+                            defaults={'access_method': access_method}
+                        )
 
-                    # grant user access to their copy
-                    new_photo.add_user_access(user)
-
-                    # track the share
-                    SharedAccess.objects.get_or_create(
-                        user=user,
-                        photo=new_photo,
-                        defaults={'access_method': access_method}
-                    )
-
-                # 3. Optionally record that user has access to original gallery (optional)
+                # 3. Optionally record that user has access to original gallery
                 SharedAccess.objects.get_or_create(
                     user=user,
                     gallery=original_gallery,
@@ -259,42 +272,56 @@ class AddToGallerySerializer(serializers.Serializer):
             except Gallery.DoesNotExist:
                 raise serializers.ValidationError("Gallery not found.")
 
-
         elif photo_id:
             try:
-                photo = Photo.objects.get(id=photo_id)
+                original_photo = Photo.objects.get(id=photo_id)
 
                 # 1. Ensure "Shared Photos" gallery exists for this user
                 shared_gallery, _ = Gallery.objects.get_or_create(
                     user=user,
                     title="Shared Photos",
-                    defaults={'is_virtual': True}
+                    defaults={
+                        'description': 'Photos shared with me from other galleries',
+                        'visibility': 'private'
+                    }
                 )
 
-                # 2. Duplicate the photo
-                photo.pk = None  # Reset primary key so Django treats it as a new object
-                photo.gallery = shared_gallery  # Assign to the user's shared gallery
-                photo.save()
+                # 2. Check if this photo is already in the user's shared gallery
+                existing_photo = Photo.objects.filter(
+                    gallery=shared_gallery,
+                    caption=original_photo.caption,
+                    image=original_photo.image.name
+                ).first()
+                
+                if existing_photo:
+                    return existing_photo
 
-                # 3. Grant the user access to *their* copy
-                photo.add_user_access(user)
+                # 3. Create a duplicate of the photo
+                new_photo = Photo(
+                    gallery=shared_gallery,
+                    image=original_photo.image,
+                    caption=original_photo.caption,
+                    visibility=original_photo.visibility,
+                    is_shareable_via_link=original_photo.is_shareable_via_link
+                )
+                new_photo.save()
 
-                # 4. Track that this is from a share
+                # 4. Grant the user access to their copy
+                new_photo.add_user_access(user)
+
+                # 5. Track that this is from a share
                 SharedAccess.objects.get_or_create(
                     user=user,
-                    photo=photo,
+                    photo=new_photo,
                     defaults={'access_method': access_method}
                 )
 
-                return photo
+                return new_photo
 
             except Photo.DoesNotExist:
                 raise serializers.ValidationError("Photo not found.")
 
-
         raise serializers.ValidationError("Either gallery or photo must be provided.")
-
-
 class PublicGallerySerializer(serializers.ModelSerializer):
     """Serializer for public gallery listings."""
     gallery = GallerySerializer(read_only=True)

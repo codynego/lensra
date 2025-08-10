@@ -11,7 +11,8 @@ class Gallery(models.Model):
     ]
     
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='galleries'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='galleries',
+        blank=True, null=True
     )
     assigned_clients = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='assigned_galleries', blank=True
@@ -29,6 +30,7 @@ class Gallery(models.Model):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
+    defaults = models.JSONField(default=dict, blank=True, null=True)
     
     # Separate visibility and sharing controls
     visibility = models.CharField(
@@ -119,6 +121,7 @@ class Photo(models.Model):
     accessible_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='accessible_photos', blank=True
     )
+    defaults = models.JSONField(default=dict, blank=True, null=True)
     image = models.ImageField(upload_to='gallery_photos/')
     caption = models.CharField(max_length=255, blank=True, null=True)
     

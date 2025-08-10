@@ -6,6 +6,7 @@ import ForgotPassword from "./components/ForgetPassword";
 import ResetPasswordConfirm from "./components/ResetPasswordConfirm";
 import Login from "./components/Login";
 import PhotographerDashboard from './components/PhotographerDashboard';
+import SharedView from './components/SharedView';
 
 export default function App() {
   return (
@@ -17,7 +18,11 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password-confirm/:uidb64/:token" element={<ResetPasswordConfirm />} />
         <Route path="/dashboard" element={<PhotographerDashboard />} />
-        {/* add other routes here */}
+        {/* Shared content routes - these match the Django URLs */}
+        <Route path="/share/gallery/:token" element={<SharedView />} />
+        <Route path="/share/photo/:token" element={<SharedView />} />
+        
+
       </Routes>
     </Router>
   );
