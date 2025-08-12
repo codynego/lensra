@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from photographers.models import Photographer
+from photographers.models import Client
 
 User = settings.AUTH_USER_MODEL
 
@@ -30,8 +31,11 @@ class Booking(models.Model):
     ]
 
     client = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="bookings"
+        Client,
+        on_delete=models.CASCADE,
+        related_name="bookings"
     )
+    
     photographer = models.ForeignKey(
         Photographer, on_delete=models.CASCADE, related_name="bookings"
     )
@@ -48,8 +52,15 @@ class Booking(models.Model):
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def is_guest_booking(self):
+        return self.client is None
+
     def __str__(self):
-        return f"Booking by {self.client} with {self.photographer} on {self.date}"
+        name = (
+            self.client.get_full_name() if self.client
+            else self.guest_name or "Guest"
+        )
+        return f"Booking by {name} with {self.photographer} on {self.date}"
 
 
 class Payment(models.Model):

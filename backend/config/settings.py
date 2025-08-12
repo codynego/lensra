@@ -186,3 +186,5 @@ EMAIL_HOST_PASSWORD = 'ieysjyaqbtindpak'  # Use app-specific password
 DEFAULT_FROM_EMAIL = 'Lensra <emonenaabednego@gmail.com>'
 
 FRONTEND_URL = 'http://localhost:8080/api/accounts/'  # Update with your frontend URL
+
+

@@ -2,7 +2,9 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-
+from photographers.models import Client
+from datetime import datetime
+from rest_framework import serializers
 from .models import (
     ServicePackage,
     PhotographerAvailability,
@@ -19,6 +21,12 @@ from .serializers import (
     PaymentSerializer,
     PhotographerTimeSlotSerializer,
 )
+import logging
+from rest_framework.settings import api_settings
+from rest_framework.exceptions import PermissionDenied, ValidationError
+
+logger = logging.getLogger(__name__)
+
 
 
 # ServicePackage ListCreate and RetrieveUpdateDestroy
@@ -90,45 +98,106 @@ class PhotographerBlockedDateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 # Booking ListCreate and Detail
+
 class BookingListCreateView(generics.ListCreateAPIView):
     serializer_class = BookingSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
+        """Return bookings based on user type: photographer, client, or none for guests."""
         user = self.request.user
-        if hasattr(user, "photographer"):
-            return Booking.objects.filter(photographer=user.photographer)
-        return Booking.objects.filter(client=user)
+        if user.is_authenticated:
+            if hasattr(user, "photographer"):
+                logger.debug(f"Fetching bookings for photographer: {user.photographer.id}")
+                return Booking.objects.filter(photographer=user.photographer)
+            logger.debug(f"Fetching bookings for client user: {user.id}")
+            return Booking.objects.filter(client__user=user)
+        logger.debug("No bookings returned for unauthenticated user")
+        return Booking.objects.none()
 
     def perform_create(self, serializer):
-        package = serializer.validated_data["package"]
-        photographer = package.photographer
-        date = serializer.validated_data["date"]
-        slot_id = self.request.data.get("slot_id")
-
-        if not slot_id:
-            raise serializers.ValidationError("You must select a time slot.")
-
+        """Handle booking creation with slot validation and client assignment."""
         try:
-            slot = PhotographerTimeSlot.objects.get(
-                id=slot_id, photographer=photographer, date=date, is_booked=False
+            package = serializer.validated_data["package"]
+            photographer = package.photographer
+            date = serializer.validated_data["date"]
+            time_slot_id = self.request.data.get("time_slot_id")
+
+            # Validate time_slot_id
+            if not time_slot_id:
+                logger.error("No time_slot_id provided in request")
+                raise ValidationError("You must select a time slot.")
+
+            # Check slot availability
+            try:
+                slot = PhotographerTimeSlot.objects.get(
+                    id=time_slot_id,
+                    photographer=photographer,
+                    date=date,
+                    is_booked=False
+                )
+                logger.debug(f"Found available time slot: {slot.id}, {slot.start_time}")
+            except PhotographerTimeSlot.DoesNotExist:
+                logger.error(f"Time slot {time_slot_id} unavailable for photographer {photographer.id} on {date}")
+                raise ValidationError("Selected time slot is unavailable.")
+
+            # Check for blocked dates
+            if PhotographerBlockedDate.objects.filter(
+                photographer=photographer,
+                date=date
+            ).exists():
+                logger.error(f"Photographer {photographer.id} is blocked on {date}")
+                raise ValidationError("Photographer is unavailable on this date.")
+
+            # Determine client
+            if self.request.user.is_authenticated:
+                client, _ = Client.objects.get_or_create(
+                    user=self.request.user,
+                    defaults={
+                        "name": self.request.user.get_full_name() or self.request.user.username,
+                        "email": self.request.user.email,
+                        "photographer": photographer
+                    }
+                )
+                logger.debug(f"Using authenticated client: {client.id}")
+            else:
+                guest_name = self.request.data.get("guest_name")
+                guest_email = self.request.data.get("guest_email")
+                if not guest_name:
+                    logger.error("Guest booking attempted without name")
+                    raise ValidationError("Guest bookings require a name.")
+                client, _ = Client.objects.get_or_create(
+                    user=None,
+                    email=guest_email,
+                    defaults={"name": guest_name, "photographer": photographer}
+                )
+                logger.debug(f"Created guest client: {client.id}")
+
+            # Mark slot as booked
+            slot.is_booked = True
+            slot.save()
+            logger.debug(f"Marked time slot {slot.id} as booked")
+
+            # Save booking
+            serializer.save(
+                client=client,
+                photographer=photographer,
+                total_price=package.price
             )
-        except PhotographerTimeSlot.DoesNotExist:
-            raise serializers.ValidationError("Selected slot is unavailable.")
+            logger.info(f"Booking created successfully for client {client.id}, photographer {photographer.id}")
 
-        # Check blocked dates
-        if PhotographerBlockedDate.objects.filter(photographer=photographer, date=date).exists():
-            raise serializers.ValidationError("Photographer is unavailable on this date.")
+        except Exception as e:
+            logger.error(f"Error creating booking: {str(e)}", exc_info=True)
+            raise
 
-        # Mark slot as booked
-        slot.is_booked = True
-        slot.save()
+    def get_success_headers(self, data):
+        """Return headers with the URL of the created resource."""
+        try:
+            return {'Location': str(data[api_settings.URL_FIELD_NAME])}
+        except (TypeError, KeyError):
+            logger.warning("Could not generate success headers, returning empty headers")
+            return {}
 
-        serializer.save(
-            client=self.request.user,
-            photographer=photographer,
-            total_price=package.price
-        )
 
 
 class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -193,24 +262,39 @@ class PaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 # PhotographerTimeSlot ListCreate and Detail
+
+
 class PhotographerTimeSlotListCreateView(generics.ListCreateAPIView):
     serializer_class = PhotographerTimeSlotSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = PhotographerTimeSlot.objects.all()
-        date = self.request.query_params.get("date")
-        photographer_id = self.request.query_params.get("photographer")
-
-        if date:
-            queryset = queryset.filter(date=date)
-        if photographer_id:
-            queryset = queryset.filter(photographer_id=photographer_id)
-
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(photographer=self.request.user.photographer)
+        photographer_id = self.request.query_params.get('photographer')
+        selected_date = self.request.query_params.get('date')
+        
+        print(f"DEBUG: photographer_id={photographer_id}, selected_date={selected_date}")
+        
+        if not photographer_id:
+            return PhotographerTimeSlot.objects.none()
+        
+        # Base queryset
+        queryset = PhotographerTimeSlot.objects.filter(photographer_id=photographer_id)
+        
+        # Apply date filter if provided
+        if selected_date:
+            try:
+                # Convert string date to date object
+                date_obj = datetime.strptime(selected_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(date=date_obj)
+                
+            except ValueError:
+                print(f"DEBUG: Invalid date format: {selected_date}")
+                return PhotographerTimeSlot.objects.none()
+        
+        result = queryset.order_by('start_time')
+        print(f"DEBUG: Final queryset count: {result.count()}")
+        
+        return result
 
 
 class PhotographerTimeSlotDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -219,3 +303,4 @@ class PhotographerTimeSlotDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return PhotographerTimeSlot.objects.filter(photographer=self.request.user.photographer)
+
