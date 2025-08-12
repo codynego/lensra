@@ -12,6 +12,7 @@ import {
   DownloadIcon
 } from "@heroicons/react/outline";
 import axios from "axios";
+import { useAuth } from "../../AuthContext"; // Import useAuth
 
 const GalleryCard = ({
   gallery,
@@ -29,6 +30,7 @@ const GalleryCard = ({
   const [isShareableViaLink, setIsShareableViaLink] = useState(gallery?.is_shareable_via_link || false);
   const [shareUrl, setShareUrl] = useState(gallery?.share_url || '');
   const [updating, setUpdating] = useState(false);
+  const { token, isAuthenticated } = useAuth(); // Get token and isAuthenticated
 
   const handleRenameSubmit = () => {
     if (newTitle.trim() && newTitle !== gallery?.title) {
@@ -53,7 +55,6 @@ const GalleryCard = ({
     
     setLoadingSubGallery(true);
     try {
-      const token = localStorage.getItem("accessToken");
       const res = await axios.post(
         "http://127.0.0.1:8000/api/gallery/galleries/create/",
         {
@@ -92,7 +93,6 @@ const GalleryCard = ({
   const handleUpdateSharing = async (newVisibility, newShareableViaLink) => {
     setUpdating(true);
     try {
-      const token = localStorage.getItem("accessToken");
       const res = await axios.patch(
         `http://127.0.0.1:8000/api/gallery/galleries/${gallery.id}/share/`,
         { 

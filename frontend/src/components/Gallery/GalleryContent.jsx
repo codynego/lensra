@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import GalleryCard from "./GalleryCard";
 import GalleryView from "./GalleryView";
 import axios from "axios";
+import { useAuth } from "../../AuthContext"; 
 
 const API_BASE_URL = "http://localhost:8000/api";
 
@@ -14,15 +15,13 @@ const GalleryContent = () => {
   const [error, setError] = useState(null);
   const [selectedGallery, setSelectedGallery] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const { token, isAuthenticated } = useAuth(); // Get token and isAuthenticated
   const [activeTab, setActiveTab] = useState('my-galleries'); // 'my-galleries', 'shared', 'public'
   const [organizedGalleries, setOrganizedGalleries] = useState({
     owned_galleries: [],
     assigned_galleries: [],
     shared_galleries: []
   });
-
-  const token = localStorage.getItem("accessToken");
-  const isAuthenticated = !!token;
 
   useEffect(() => {
     if (activeTab === 'my-galleries') {

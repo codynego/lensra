@@ -1,16 +1,15 @@
-// src/components/GalleryView.jsx
 import React, { useState, useRef, useEffect } from "react";
 import GalleryCard from "./GalleryCard";
 import PhotoCard from "./PhotoCard";
-import axios from "axios";
+import { useApi } from "../../useApi"; // Import useApi
+import { useAuth } from "../../AuthContext";
 
 const API_BASE_URL = "http://localhost:8000/api";
 
 const GalleryView = ({ 
   gallery, 
   onBack, 
-  onError,
-  token 
+  onError
 }) => {
   const [photos, setPhotos] = useState([]);
   const [subGalleries, setSubGalleries] = useState([]);
@@ -34,7 +33,8 @@ const GalleryView = ({
   const [showToolbar, setShowToolbar] = useState(false);
 
   const fileInputRef = useRef(null);
-  const isAuthenticated = !!token;
+  const { token, isAuthenticated } = useAuth(); // Use useAuth
+  const { apiFetch } = useApi(); // Use useApi hook
   const canEdit = gallery?.can_share !== false;
   const isSharedView = gallery?.access_type && gallery.access_type !== 'owner';
 
@@ -121,7 +121,7 @@ const GalleryView = ({
   }, [subGalleries, searchQuery, sortBy]);
 
   const getCurrentUserId = () => {
-    return null;
+    return null; // Adjust based on your auth setup if needed
   };
 
   const normalizeGallery = (g) => ({
@@ -131,13 +131,9 @@ const GalleryView = ({
 
   const fetchGalleryDetails = async (galleryId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/galleries/${galleryId}/`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const response = await apiFetch(`${API_BASE_URL}/gallery/galleries/${galleryId}/`);
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
       
       setPhotos(data.photos || []);
       setSubGalleries(data.sub_galleries || []);
@@ -192,17 +188,11 @@ const GalleryView = ({
         const [type, id] = itemId.split('-');
         if (type === 'photo') {
           promises.push(
-            fetch(`${API_BASE_URL}/gallery/photos/${id}/`, {
-              method: "DELETE",
-              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            })
+            apiFetch(`${API_BASE_URL}/gallery/photos/${id}/`, { method: "DELETE" })
           );
         } else if (type === 'gallery') {
           promises.push(
-            fetch(`${API_BASE_URL}/gallery/galleries/${id}/`, {
-              method: "DELETE",
-              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            })
+            apiFetch(`${API_BASE_URL}/gallery/galleries/${id}/`, { method: "DELETE" })
           );
         }
       });
@@ -224,16 +214,16 @@ const GalleryView = ({
 
     setAddingToCollection(true);
     try {
-      const res = await axios.post(
-        `${API_BASE_URL}/gallery/add-to-collection/`,
-        { gallery_id: gallery.id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await apiFetch(`${API_BASE_URL}/gallery/add-to-collection/`, {
+        method: "POST",
+        body: JSON.stringify({ gallery_id: gallery.id }),
+      });
+      if (!response.ok) throw new Error(await response.text());
       alert("Gallery added to your collection!");
       setShowAddToCollectionButton(false);
     } catch (err) {
       console.error("Error adding gallery to collection:", err);
-      alert(err.response?.data?.detail || "Failed to add gallery to collection.");
+      alert(err.message || "Failed to add gallery to collection.");
     } finally {
       setAddingToCollection(false);
     }
@@ -246,15 +236,15 @@ const GalleryView = ({
     }
 
     try {
-      await axios.post(
-        `${API_BASE_URL}/gallery/add-to-collection/`,
-        { photo_id: photo.id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await apiFetch(`${API_BASE_URL}/gallery/add-to-collection/`, {
+        method: "POST",
+        body: JSON.stringify({ photo_id: photo.id }),
+      });
+      if (!response.ok) throw new Error(await response.text());
       alert("Photo added to your collection!");
     } catch (err) {
       console.error("Error adding photo to collection:", err);
-      alert(err.response?.data?.detail || "Failed to add photo to collection.");
+      alert(err.message || "Failed to add photo to collection.");
     }
   };
 
@@ -277,21 +267,17 @@ const GalleryView = ({
         parent_gallery: gallery.id
       };
 
-      const res = await fetch(`${API_BASE_URL}/gallery/galleries/create/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/galleries/create/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify(requestBody),
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
+      if (!response.ok) {
+        const errorData = await response.json();
         throw new Error(errorData.detail || errorData.error || "Failed to create sub-gallery.");
       }
 
-      const data = await res.json();
+      const data = await response.json();
       setSubGalleries((prev) => [normalizeGallery(data), ...prev]);
       setNewGalleryTitle("");
       setShowCreateForm(false);
@@ -334,13 +320,12 @@ const GalleryView = ({
         formData.append("gallery", gallery.id);
       }
 
-      const res = await fetch(`${API_BASE_URL}/gallery/photos/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/photos/`, {
         method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: formData,
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!response.ok) throw new Error(await response.text());
       await fetchGalleryDetails(gallery.id);
     } catch (err) {
       console.error("uploadPhotos error:", err);
@@ -358,18 +343,14 @@ const GalleryView = ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/photos/${photo.id}/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/photos/${photo.id}/`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({ caption: newCaption }),
       });
 
-      if (!res.ok) throw new Error("Failed to rename photo");
+      if (!response.ok) throw new Error("Failed to rename photo");
       
-      const updatedPhoto = await res.json();
+      const updatedPhoto = await response.json();
       setPhotos((prev) => 
         prev.map((p) => (p.id === photo.id ? updatedPhoto : p))
       );
@@ -386,12 +367,11 @@ const GalleryView = ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/photos/${photo.id}/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/photos/${photo.id}/`, {
         method: "DELETE",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
 
-      if (!res.ok) throw new Error("Failed to delete photo");
+      if (!response.ok) throw new Error("Failed to delete photo");
       setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
     } catch (err) {
       console.error("deletePhoto error:", err);
@@ -418,17 +398,13 @@ Dimensions: ${photo.width && photo.height ? `${photo.width} × ${photo.height}` 
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/galleries/${subGallery.id}/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/galleries/${subGallery.id}/`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({ title: newTitle }),
       });
-      if (!res.ok) throw new Error("Failed to rename sub-gallery");
+      if (!response.ok) throw new Error("Failed to rename sub-gallery");
       
-      const updatedSubGallery = await res.json();
+      const updatedSubGallery = await response.json();
       setSubGalleries((prev) =>
         prev.map((sg) => (sg.id === subGallery.id ? normalizeGallery(updatedSubGallery) : sg))
       );
@@ -445,11 +421,10 @@ Dimensions: ${photo.width && photo.height ? `${photo.width} × ${photo.height}` 
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/galleries/${subGallery.id}/`, {
+      const response = await apiFetch(`${API_BASE_URL}/gallery/galleries/${subGallery.id}/`, {
         method: "DELETE",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
-      if (!res.ok) throw new Error("Failed to delete sub-gallery");
+      if (!response.ok) throw new Error("Failed to delete sub-gallery");
       
       setSubGalleries((prev) => prev.filter((sg) => sg.id !== subGallery.id));
     } catch (err) {
@@ -525,7 +500,6 @@ Dimensions: ${photo.width && photo.height ? `${photo.width} × ${photo.height}` 
         gallery={selectedSubGallery}
         onBack={handleBackFromSubGallery}
         onError={onError}
-        token={token}
       />
     );
   }

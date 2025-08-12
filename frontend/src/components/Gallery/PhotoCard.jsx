@@ -1,33 +1,38 @@
 import React, { useState } from "react";
 import { Menu } from "@headlessui/react";
-import { 
-  DotsVerticalIcon, 
-  XIcon,
+import {
+  DotsVerticalIcon,
   ShareIcon,
   GlobeIcon,
   LockClosedIcon,
   ClipboardCopyIcon,
   HeartIcon,
-  DownloadIcon
+  DownloadIcon,
 } from "@heroicons/react/outline";
-import axios from "axios";
+import { useApi } from "../../useApi"; // Import useApi
+import PhotoPreview from "./PhotoPreview";
+import { useAuth } from "../../AuthContext";
 
-const PhotoCard = ({ 
-  photo, 
-  onRename, 
-  onDelete, 
-  onInfo, 
+const PhotoCard = ({
+  photo,
+  onRename,
+  onDelete,
+  onInfo,
   onAddToCollection,
-  showAddToCollection = false 
+  showAddToCollection = false,
 }) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newCaption, setNewCaption] = useState(photo.caption || "");
   const [showPreview, setShowPreview] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [visibility, setVisibility] = useState(photo?.visibility || 'private');
-  const [isShareableViaLink, setIsShareableViaLink] = useState(photo?.is_shareable_via_link || false);
-  const [shareUrl, setShareUrl] = useState(photo?.share_url || '');
+  const [visibility, setVisibility] = useState(photo?.visibility || "private");
+  const [isShareableViaLink, setIsShareableViaLink] = useState(
+    photo?.is_shareable_via_link || false
+  );
+  const [shareUrl, setShareUrl] = useState(photo?.share_url || "");
   const [updating, setUpdating] = useState(false);
+  const { token, isAuthenticated } = useAuth();
+  const { apiFetch } = useApi(); // Use the useApi hook
 
   const handleRenameSubmit = () => {
     if (newCaption.trim() && newCaption !== photo.caption) {
@@ -49,7 +54,6 @@ const PhotoCard = ({
   const closePreview = () => setShowPreview(false);
 
   const handleCardClick = (e) => {
-    // Don't open preview if clicking on menu or rename input
     if (e.target.closest('[data-menu]') || e.target.closest('[data-rename]') || e.target.closest('[data-button]')) {
       return;
     }
@@ -59,30 +63,28 @@ const PhotoCard = ({
   const handleUpdateSharing = async (newVisibility, newShareableViaLink) => {
     setUpdating(true);
     try {
-      const token = localStorage.getItem("accessToken");
-      const res = await axios.patch(
-        `http://127.0.0.1:8000/api/gallery/photos/${photo.id}/share/`,
-        { 
+      const response = await apiFetch(`http://127.0.0.1:8000/api/gallery/photos/${photo.id}/share/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
           visibility: newVisibility,
-          is_shareable_via_link: newShareableViaLink
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      
-      setVisibility(res.data.visibility);
-      setIsShareableViaLink(res.data.is_shareable_via_link);
-      setShareUrl(res.data.share_url || '');
-      
-      // Update the photo object if parent component needs it
+          is_shareable_via_link: newShareableViaLink,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update sharing settings');
+      }
+
+      const data = await response.json();
+      setVisibility(data.visibility);
+      setIsShareableViaLink(data.is_shareable_via_link);
+      setShareUrl(data.share_url || '');
+
       if (photo.visibility !== undefined) {
-        photo.visibility = res.data.visibility;
-        photo.is_shareable_via_link = res.data.is_shareable_via_link;
-        photo.share_url = res.data.share_url;
-        photo.is_public = res.data.is_public;
+        photo.visibility = data.visibility;
+        photo.is_shareable_via_link = data.is_shareable_via_link;
+        photo.share_url = data.share_url;
+        photo.is_public = data.is_public;
       }
     } catch (err) {
       console.error("Error updating sharing:", err);
@@ -102,14 +104,13 @@ const PhotoCard = ({
 
   const copyShareUrl = async () => {
     if (!shareUrl) return;
-    
+
     try {
       const fullUrl = `${window.location.origin}${shareUrl}`;
       await navigator.clipboard.writeText(fullUrl);
       alert("Share link copied to clipboard!");
     } catch (err) {
       console.error("Failed to copy:", err);
-      // Fallback for older browsers
       const textArea = document.createElement("textarea");
       textArea.value = `${window.location.origin}${shareUrl}`;
       document.body.appendChild(textArea);
@@ -123,7 +124,7 @@ const PhotoCard = ({
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(photo.image);
+      const response = await apiFetch(photo.image, { method: 'GET' });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -176,13 +177,11 @@ const PhotoCard = ({
 
   return (
     <>
-      {/* Photo Card - Responsive width, fixed height */}
       <div 
         className="relative group bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer transition-transform hover:scale-105 w-full"
         onClick={handleCardClick}
         style={{ height: '220px' }}
       >
-        {/* Image Container - Fixed aspect ratio */}
         <div className="w-full h-40 bg-gray-900 overflow-hidden">
           <img
             src={photo.image}
@@ -193,7 +192,6 @@ const PhotoCard = ({
           />
         </div>
 
-        {/* Caption Section - Fixed height */}
         <div className="h-20 p-3 bg-gray-800 text-white text-sm flex flex-col justify-between">
           {isRenaming ? (
             <input
@@ -223,7 +221,6 @@ const PhotoCard = ({
           )}
         </div>
 
-        {/* Add to Collection Button (for shared/public photos) */}
         {showAddToCollection && (
           <div 
             data-button
@@ -239,7 +236,6 @@ const PhotoCard = ({
           </div>
         )}
 
-        {/* Options Menu Button - Always visible on mobile */}
         <div 
           data-menu
           className="absolute top-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-10"
@@ -345,7 +341,6 @@ const PhotoCard = ({
                     )}
                   </Menu.Item>
 
-                  {/* Separator */}
                   <div className="border-t border-gray-600"></div>
 
                   <Menu.Item>
@@ -371,7 +366,6 @@ const PhotoCard = ({
                 </>
               )}
 
-              {/* Options for non-owners */}
               {!canManageSharing && (
                 <Menu.Item>
                   {({ active }) => (
@@ -391,77 +385,18 @@ const PhotoCard = ({
           </Menu>
         </div>
 
-        {/* Overlay gradient for better text/button visibility */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
       </div>
 
-      {/* Preview Modal */}
-      {showPreview && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4"
-          onClick={closePreview}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="preview-title"
-        >
-          <div
-            className="relative max-w-7xl w-full h-full flex flex-col items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close Button */}
-            <button
-              className="absolute top-4 right-4 bg-gray-900 bg-opacity-80 rounded-full p-3 hover:bg-opacity-100 focus:outline-none focus:ring-2 focus:ring-white transition-all duration-200 z-10"
-              onClick={closePreview}
-              aria-label="Close preview"
-            >
-              <XIcon className="h-6 w-6 text-white" />
-            </button>
+      <PhotoPreview
+        isOpen={showPreview}
+        onClose={closePreview}
+        photo={photo}
+        onDownload={handleDownload}
+        getAccessTypeDisplay={getAccessTypeDisplay}
+        getStatusIcon={getStatusIcon}
+      />
 
-            {/* Download Button */}
-            <button
-              className="absolute top-4 left-4 bg-gray-900 bg-opacity-80 rounded-full p-3 hover:bg-opacity-100 focus:outline-none focus:ring-2 focus:ring-white transition-all duration-200 z-10"
-              onClick={handleDownload}
-              aria-label="Download photo"
-            >
-              <DownloadIcon className="h-6 w-6 text-white" />
-            </button>
-
-            {/* Image */}
-            <div className="flex-1 flex items-center justify-center max-h-[85vh] w-full">
-              <img
-                src={photo.image}
-                alt={photo.caption || "Photo"}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                id="preview-title"
-              />
-            </div>
-
-            {/* Caption and Info */}
-            <div className="mt-4 text-center max-w-4xl">
-              {photo.caption && (
-                <div className="text-white text-lg bg-black bg-opacity-50 px-6 py-3 rounded-lg mb-2">
-                  {photo.caption}
-                </div>
-              )}
-              
-              {/* Share info for shared photos */}
-              {photo.access_type && photo.access_type !== 'owner' && (
-                <div className="flex justify-center gap-2 mb-2">
-                  {getAccessTypeDisplay()}
-                  {getStatusIcon()}
-                </div>
-              )}
-            </div>
-
-            {/* Navigation hint */}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-gray-400 text-sm">
-              Click anywhere outside the image to close
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">

@@ -262,39 +262,49 @@ class PaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 # PhotographerTimeSlot ListCreate and Detail
-
-
 class PhotographerTimeSlotListCreateView(generics.ListCreateAPIView):
+    """
+    List and create photographer time slots.
+    Supports filtering by `photographer` and `date` query parameters.
+    """
     serializer_class = PhotographerTimeSlotSerializer
     permission_classes = [permissions.IsAuthenticated]
+    debug_mode = False  # Set to True to enable print debugging
 
     def get_queryset(self):
-        photographer_id = self.request.query_params.get('photographer')
-        selected_date = self.request.query_params.get('date')
-        
-        print(f"DEBUG: photographer_id={photographer_id}, selected_date={selected_date}")
-        
+        photographer_id = self.request.query_params.get("photographer")
+        selected_date = self.request.query_params.get("date")
+
+        if self.debug_mode:
+            print(f"DEBUG: photographer_id={photographer_id}, selected_date={selected_date}")
+
         if not photographer_id:
             return PhotographerTimeSlot.objects.none()
-        
-        # Base queryset
+
         queryset = PhotographerTimeSlot.objects.filter(photographer_id=photographer_id)
-        
-        # Apply date filter if provided
+
         if selected_date:
             try:
-                # Convert string date to date object
-                date_obj = datetime.strptime(selected_date, '%Y-%m-%d').date()
+                date_obj = datetime.strptime(selected_date, "%Y-%m-%d").date()
                 queryset = queryset.filter(date=date_obj)
-                
             except ValueError:
-                print(f"DEBUG: Invalid date format: {selected_date}")
+                if self.debug_mode:
+                    print(f"DEBUG: Invalid date format: {selected_date}")
                 return PhotographerTimeSlot.objects.none()
-        
-        result = queryset.order_by('start_time')
-        print(f"DEBUG: Final queryset count: {result.count()}")
-        
-        return result
+
+        if self.debug_mode:
+            print(f"DEBUG: Final queryset count: {queryset.count()}")
+
+        return queryset.order_by("start_time")
+
+    def perform_create(self, serializer):
+        """
+        Automatically assign the authenticated photographer to the created slot.
+        """
+        user = self.request.user
+        if not hasattr(user, "photographer"):
+            raise PermissionDenied("You must be a photographer to create a time slot.")
+        serializer.save(photographer=user.photographer)
 
 
 class PhotographerTimeSlotDetailView(generics.RetrieveUpdateDestroyAPIView):
