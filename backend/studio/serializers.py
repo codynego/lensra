@@ -66,7 +66,7 @@ class StudioFullSerializer(serializers.ModelSerializer):
 class StudioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Studio
-        fields = ["name", "slug", "custom_domain", "status"]
+        fields = ["name", "slug", "custom_domain", "status", "primary_color", "secondary_color", "font_choice", "cover_photo"]
 
 
 class PhotographerSerializer(serializers.ModelSerializer):
