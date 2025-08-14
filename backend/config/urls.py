@@ -18,6 +18,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
+from django.shortcuts import render
+
+def landing_or_studio_home(request):
+    if getattr(request, "studio", None):
+        return render(request, "studios/public_home.html", {"studio": request.studio})
+    return render(request, "marketing/landing.html")
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,6 +32,9 @@ urlpatterns = [
     path('api/photographers/', include('photographers.urls')),
     path('api/bookings/', include('bookings.urls')),
     path('', include('gallery.urls')),
+    path('api/studio/', include('studio.urls')),
+    path("", landing_or_studio_home, name="home"),
+
 ]
 
 if settings.DEBUG:

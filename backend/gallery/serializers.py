@@ -55,10 +55,15 @@ class PhotoSerializer(serializers.ModelSerializer):
 
 
 class PhotoCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating photos."""
+    """Serializer for creating photos."""
+    
     class Meta:
         model = Photo
         fields = ["image", "caption", "visibility", "is_shareable_via_link"]
+
+    def create(self, validated_data):
+        """Create photo instance"""
+        return Photo.objects.create(**validated_data)
 
 
 class PhotoShareSerializer(serializers.Serializer):

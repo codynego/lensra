@@ -19,8 +19,8 @@ class PhotographerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Photographer
         fields = [
-            'studio_name', 'website', 'instagram', 'phone_number',
-            'location', 'bio', 'profile_picture'
+            'user', 'instagram', 'location', 'bio', 'profile_picture'
         ]
+        read_only_fields = ['user', 'created_at']
 
 

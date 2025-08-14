@@ -468,11 +468,10 @@ class PhotoListCreateView(generics.ListCreateAPIView):
         return PhotoSerializer
 
     def get_queryset(self):
-        """Match `GET /api/gallery/photos/?gallery={galleryId}`."""
+        """Match GET /api/gallery/photos/?gallery={galleryId}"""
         gallery_id = self.request.query_params.get('gallery')
         if gallery_id:
             gallery = get_object_or_404(Gallery, id=gallery_id)
-            # Check if user has access to this gallery
             if not gallery.can_user_access(self.request.user):
                 return Photo.objects.none()
             return gallery.photos.all()
@@ -481,9 +480,59 @@ class PhotoListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         gallery_id = self.request.data.get('gallery')
         gallery = get_object_or_404(Gallery, pk=gallery_id)
+        
         if gallery.user != self.request.user:
             raise PermissionDenied("You do not have permission to add photos to this gallery.")
+        
+        # Save the photo(s) with the gallery relationship
         serializer.save(gallery=gallery)
+
+    def create(self, request, *args, **kwargs):
+        """Handle multiple file uploads"""
+        files = request.FILES.getlist('image')  # Get list of files
+        gallery_id = request.data.get('gallery')
+        
+        if not gallery_id:
+            return Response(
+                {"error": "Gallery ID is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        gallery = get_object_or_404(Gallery, pk=gallery_id)
+        
+        if gallery.user != request.user:
+            raise PermissionDenied("You do not have permission to add photos to this gallery.")
+
+        created_photos = []
+        errors = []
+
+        for file in files:
+            # Create data dict for each file
+            data = {
+                'image': file,
+                'caption': request.data.get('caption', ''),
+                'visibility': request.data.get('visibility', 'private'),
+                'is_shareable_via_link': request.data.get('is_shareable_via_link', False)
+            }
+            
+            serializer = self.get_serializer(data=data)
+            if serializer.is_valid():
+                photo = serializer.save(gallery=gallery)
+                created_photos.append(photo)
+            else:
+                errors.append({
+                    'file': file.name,
+                    'errors': serializer.errors
+                })
+
+        if created_photos:
+            response_serializer = PhotoSerializer(created_photos, many=True, context={'request': request})
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(
+                {"errors": errors}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 # ---- UPDATE / DELETE (No changes needed) ----

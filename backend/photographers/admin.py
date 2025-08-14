@@ -4,7 +4,7 @@ from django.contrib import admin
 
 @admin.register(Photographer)
 class PhotographerAdmin(admin.ModelAdmin):
-    list_display = ('user', 'studio_name', 'phone_number', 'location')
+    list_display = ('user', 'location')
 
 
 @admin.register(Client)

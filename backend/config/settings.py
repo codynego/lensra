@@ -29,10 +29,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [".lvh.me",]
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
 DEBUG = True
+BASE_DOMAIN = "lvh.me"
 
 
 # Application definition
@@ -53,6 +54,8 @@ INSTALLED_APPS = [
     'bookings',
     'gallery',
     'photographers',
+    'django_hosts',
+    'studio',
 ]
 SITE_ID = 1
 
@@ -66,10 +69,20 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django_hosts.middleware.HostsRequestMiddleware',
+    'django_hosts.middleware.HostsResponseMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
 CORS_ALLOW_ALL_ORIGINS = True
+
+# ROOT_HOSTCONF = 'lensra.hosts'
+# DEFAULT_HOST = 'www'
+# PARENT_HOST = 'lensra.com'
+
+ROOT_HOSTCONF = 'config.hosts'  # change `config` to your main project folder
+DEFAULT_HOST = 'www'
+
 
 TEMPLATES = [
     {
@@ -155,8 +168,13 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 # STATICFILES_DIRS = [BASE_DIR / "static"]
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Make sure these are reasonable for your use case
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10MB
 
 # MEDIA_URL = '/media/'
 # MEDIA_ROOT = BASE_DIR / 'media'

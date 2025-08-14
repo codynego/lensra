@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from photographers.models import Client
 from datetime import datetime
 from rest_framework import serializers
+from rest_framework.views import APIView
 from .models import (
     ServicePackage,
     PhotographerAvailability,
@@ -20,6 +21,7 @@ from .serializers import (
     BookingSerializer,
     PaymentSerializer,
     PhotographerTimeSlotSerializer,
+    BookingUpdateSerializer,
 )
 import logging
 from rest_framework.settings import api_settings
@@ -118,6 +120,8 @@ class BookingListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         """Handle booking creation with slot validation and client assignment."""
         try:
+            client_id = self.request.data.get("client")
+            print(f"Creating booking with client_id: {client_id}")
             package = serializer.validated_data["package"]
             photographer = package.photographer
             date = serializer.validated_data["date"]
@@ -150,7 +154,14 @@ class BookingListCreateView(generics.ListCreateAPIView):
                 raise ValidationError("Photographer is unavailable on this date.")
 
             # Determine client
-            if self.request.user.is_authenticated:
+            if client_id:
+                try:
+                    client = Client.objects.get(id=client_id, photographer=photographer)
+                    logger.debug(f"Using existing client: {client.id}")
+                except Client.DoesNotExist:
+                    logger.error(f"Client {client_id} does not exist for photographer {photographer.id}")
+                    raise ValidationError("Client does not exist.")
+            elif self.request.user.is_authenticated and photographer.user != self.request.user:
                 client, _ = Client.objects.get_or_create(
                     user=self.request.user,
                     defaults={
@@ -199,16 +210,60 @@ class BookingListCreateView(generics.ListCreateAPIView):
             return {}
 
 
-
-class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = BookingSerializer
+class BookingDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
+    def get_object(self, pk):
         user = self.request.user
-        if hasattr(user, "photographerprofile"):
-            return Booking.objects.filter(photographer=user.photographer)
-        return Booking.objects.filter(client=user)
+        booking = get_object_or_404(Booking, pk=pk)
+        
+        # Check if the user is the photographer or client
+        if booking.photographer == user.photographer:
+            return booking
+        elif booking.client and booking.client.user == user:
+            return booking
+        logger.warning(f"User {user} has no access to booking {pk}")
+        return None
+
+    def put(self, request, pk, format=None):
+        logger.debug(f"PUT request data: {request.data}")
+        booking = self.get_object(pk)
+        if not booking:
+            return Response({"error": "Booking not found or you don't have access"},
+                           status=status.HTTP_404_NOT_FOUND)
+        serializer = BookingUpdateSerializer(booking, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        logger.error(f"PUT errors: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, format=None):
+        logger.debug(f"PATCH request data: {request.data}")
+        booking = self.get_object(pk)
+        if not booking:
+            return Response({"error": "Booking not found or you don't have access"},
+                           status=status.HTTP_404_NOT_FOUND)
+        serializer = BookingUpdateSerializer(booking, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        logger.error(f"PATCH errors: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        booking = self.get_object(pk)
+        if not booking:
+            return Response({"error": "Booking not found or you don't have access"},
+                           status=status.HTTP_404_NOT_FOUND)
+        # Free up the timeslot
+        PhotographerTimeSlot.objects.filter(
+            photographer=booking.photographer,
+            date=booking.date,
+            start_time=booking.start_time
+        ).update(is_booked=False)
+        booking.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # Booking availability check (replaces @action detail=False)
