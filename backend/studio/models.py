@@ -34,7 +34,8 @@ class Studio(models.Model):
 
     # General Info
     name = models.CharField(max_length=120)
-    bio = models.TextField(blank=True, null=True)
+    tagline = models.TextField(blank=True, null=True)
+    about = models.TextField(blank=True, null=True)
     slug = models.SlugField(
         unique=True,
         help_text="Used for subdomain: <slug>.<BASE_DOMAIN>",
@@ -43,7 +44,7 @@ class Studio(models.Model):
     # Theme & Branding
     primary_color = models.CharField(max_length=7, default="#000000")  # HEX color
     secondary_color = models.CharField(max_length=7, default="#FFFFFF")  # HEX color
-    font_choice = models.CharField(max_length=50, default="Sans-serif")
+    font = models.CharField(max_length=50, default="Sans-serif")
     cover_photo = models.ImageField(upload_to="studio_covers/", blank=True, null=True)
 
     # Domain Settings

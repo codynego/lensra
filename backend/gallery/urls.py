@@ -23,6 +23,7 @@ from .views import (
     PhotoVisibilityView,
     GalleryShareLinkView,
     PhotoShareLinkView,
+    GalleryPreferenceView,
 )
 
 urlpatterns = [
@@ -72,4 +73,6 @@ urlpatterns = [
     # Client-specific (Enhanced to include shared content)
     path('api/gallery/client/galleries/', ClientAssignedGalleriesView.as_view(), name='client-assigned-galleries'),
     path('api/gallery/client/photos/', ClientAssignedPhotosView.as_view(), name='client-assigned-photos'),
+
+    path('api/gallery/preferences/', GalleryPreferenceView.as_view(), name='gallery-preferences'),
 ]

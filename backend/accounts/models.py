@@ -20,7 +20,9 @@ class User(AbstractUser):
         blank=True,
         null=True
     )
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
 
     def is_photographer(self):
         return self.role == self.ROLES[0][0]

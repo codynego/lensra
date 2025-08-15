@@ -12,7 +12,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'phone_number', 'profile_picture', 'bio']
+        fields = ['id', 'username', 'email', 'role', 'phone_number', 'profile_picture', 'bio', 'location']
 
 
 
@@ -46,7 +46,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class PhotographerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Photographer
-        fields = ['studio_name', 'website', 'bio', 'location', 'specialties']
+        fields = ['studio_name', 'website', 'bio', 'specialties']
 
     
 

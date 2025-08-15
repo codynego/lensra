@@ -13,6 +13,7 @@ from .views import (
     PhotographerTimeSlotListCreateView,
     PhotographerTimeSlotDetailView,
     check_availability,
+    BookingPreferenceDetailUpdateView
 )
 
 urlpatterns = [
@@ -42,4 +43,6 @@ urlpatterns = [
     # Photographer Time Slots
     path('time-slots/', PhotographerTimeSlotListCreateView.as_view(), name='time-slot-list-create'),
     path('time-slots/<int:pk>/', PhotographerTimeSlotDetailView.as_view(), name='time-slot-detail'),
+
+    path("preferences/", BookingPreferenceDetailUpdateView.as_view(), name="booking-preference"),
 ]

@@ -1,6 +1,17 @@
 from rest_framework import serializers
 from .models import Photographer
 from .models import Client
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'profile_picture', 'bio', 'location']
+        read_only_fields = ['id', 'role']
+
 
 class ClientSerializer(serializers.ModelSerializer):
     is_registered = serializers.BooleanField(read_only=True)
@@ -16,10 +27,11 @@ class ClientSerializer(serializers.ModelSerializer):
 
 
 class PhotographerSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Photographer
         fields = [
-            'user', 'instagram', 'location', 'bio', 'profile_picture'
+            'user', 'instagram'
         ]
         read_only_fields = ['user', 'created_at']
 

@@ -8,18 +8,50 @@ from rest_framework.decorators import api_view, permission_classes
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from .models import Gallery, Photo, PublicGallery, SharedAccess
+from .models import Gallery, Photo, PublicGallery, SharedAccess, GalleryPreference
 from .serializers import (
     GallerySerializer, PhotoSerializer, AssignClientsSerializer,
     GalleryRecursiveSerializer, GalleryCreateSerializer, GalleryShareSerializer,
     PhotoShareSerializer, AddToGallerySerializer, PublicGallerySerializer,
     GalleryListSerializer, UserGalleriesSerializer, PhotoCreateSerializer,
-    GalleryVisibilitySerializer, PhotoVisibilitySerializer, ShareLinkToggleSerializer
+    GalleryVisibilitySerializer, PhotoVisibilitySerializer, ShareLinkToggleSerializer, GalleryPreferenceSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 
 
 User = get_user_model()
+
+
+class GalleryPreferenceView(generics.GenericAPIView):
+    serializer_class = GalleryPreferenceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        # Return the existing preference if it exists
+        return GalleryPreference.objects.filter(user=self.request.user).first()
+
+    def get(self, request):
+        pref = self.get_object()
+        if pref:
+            serializer = self.get_serializer(pref)
+            return Response(serializer.data)
+        # If none exists, create default
+        pref = GalleryPreference.objects.create(user=request.user)
+        serializer = self.get_serializer(pref)
+        return Response(serializer.data)
+
+    def post(self, request):
+        pref = self.get_object()
+        if pref:
+            # Update existing
+            serializer = self.get_serializer(pref, data=request.data, partial=True)
+        else:
+            # Create new
+            serializer = self.get_serializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 # ---- Pagination ----

@@ -6,6 +6,14 @@ from django.db import transaction
 
 User = get_user_model()
 
+from .models import GalleryPreference
+
+class GalleryPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GalleryPreference
+        fields = '__all__'
+        read_only_fields = ['user', 'updated_at']
+
 
 class UserSimpleSerializer(serializers.ModelSerializer):
     """Lightweight user representation for assigned clients."""

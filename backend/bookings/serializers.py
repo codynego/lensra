@@ -7,8 +7,28 @@ from .models import (
     PhotographerBlockedDate,
     Booking,
     Payment,
-    PhotographerTimeSlot
+    PhotographerTimeSlot,
+    BookingPreference
 )
+
+
+
+class BookingPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingPreference
+        fields = [
+            "available_days",
+            "start_time",
+            "end_time",
+            "min_notice_hours",
+            "max_future_days",
+            "allow_same_day",
+            "deposit_required",
+            "deposit_percentage",
+            "auto_confirm",
+            "notes",
+        ]
+
 
 
 class ServicePackageSerializer(serializers.ModelSerializer):
@@ -20,10 +40,10 @@ class ServicePackageSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "price",
-            "duration_minutes",
+            "duration",
             "is_active"
         ]
-        read_only_fields = ["photographer"]
+        read_only_fields = ['id', "photographer"]
 
 
 class PhotographerAvailabilitySerializer(serializers.ModelSerializer):

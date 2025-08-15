@@ -6,12 +6,13 @@ from .models import (
     PhotographerTimeSlot,
     PhotographerBlockedDate,
     PhotographerAvailability,
+    BookingPreference
 )
 
 
 @admin.register(ServicePackage)
 class ServicePackageAdmin(admin.ModelAdmin):
-    list_display = ("title", "photographer", "price", "duration_minutes", "is_active")
+    list_display = ("title", "photographer", "price", "duration", "is_active")
     list_filter = ("is_active", "photographer")
     search_fields = ("title", "photographer__user__username")
 
@@ -50,3 +51,14 @@ class PhotographerAvailabilityAdmin(admin.ModelAdmin):
     list_display = ("photographer", "day_of_week", "start_time", "end_time")
     list_filter = ("day_of_week",)
     search_fields = ("photographer__user__username",)
+
+@admin.register(BookingPreference)
+class BookingPreferenceAdmin(admin.ModelAdmin):
+    list_display = ("photographer",)
+    search_fields = ("photographer__user__username",)
+    list_filter = ("photographer",)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return self.readonly_fields + ('photographer',)
+        return self.readonly_fields

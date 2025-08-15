@@ -13,7 +13,7 @@ class ServicePackage(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    duration_minutes = models.PositiveIntegerField(
+    duration = models.PositiveIntegerField(
         help_text="Length of the session in minutes"
     )
     is_active = models.BooleanField(default=True)
@@ -61,6 +61,71 @@ class Booking(models.Model):
             else self.guest_name or "Guest"
         )
         return f"Booking by {name} with {self.photographer} on {self.date}"
+
+
+
+
+class BookingPreference(models.Model):
+    photographer = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="booking_preference"
+    )
+    
+    # Availability
+    available_days = models.JSONField(
+        default=list,
+        help_text="List of days available for booking, e.g., ['Monday', 'Tuesday']"
+    )
+    start_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Earliest time available for bookings"
+    )
+    end_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Latest time available for bookings"
+    )
+
+    # Session rules
+    min_notice_hours = models.PositiveIntegerField(
+        default=24,
+        help_text="Minimum notice required before booking (in hours)"
+    )
+    max_future_days = models.PositiveIntegerField(
+        default=180,
+        help_text="How many days in advance clients can book"
+    )
+    allow_same_day = models.BooleanField(default=False)
+
+    # Payment rules
+    deposit_required = models.BooleanField(default=False)
+    deposit_percentage = models.PositiveIntegerField(
+        default=0,
+        help_text="Deposit percentage if required"
+    )
+
+    # Additional options
+    auto_confirm = models.BooleanField(
+        default=False,
+        help_text="If true, bookings are auto-confirmed without manual approval"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional booking instructions for clients"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Booking Preference"
+        verbose_name_plural = "Booking Preferences"
+
+    def __str__(self):
+        return f"{self.photographer.username}'s booking preferences"
+
 
 
 class Payment(models.Model):

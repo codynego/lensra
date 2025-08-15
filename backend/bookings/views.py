@@ -13,6 +13,7 @@ from .models import (
     Booking,
     Payment,
     PhotographerTimeSlot,
+    BookingPreference
 )
 from .serializers import (
     ServicePackageSerializer,
@@ -29,6 +30,18 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 logger = logging.getLogger(__name__)
 
+from .serializers import BookingPreferenceSerializer
+
+class BookingPreferenceDetailUpdateView(generics.RetrieveUpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = BookingPreferenceSerializer
+
+    def get_object(self):
+        # Ensures every photographer has booking preferences
+        obj, created = BookingPreference.objects.get_or_create(
+            photographer=self.request.user
+        )
+        return obj
 
 
 # ServicePackage ListCreate and RetrieveUpdateDestroy

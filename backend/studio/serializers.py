@@ -16,13 +16,37 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']  # include whatever you need
+        fields = ["username", "email", "location", "phone_number"]
+        extra_kwargs = {
+            "username": {"required": False},
+            "email": {"required": False}, 
+            "location": {"required": False},
+            "phone_number": {"required": False},
+        }
+
+    def validate_email(self, value):
+        """Validate email format and uniqueness"""
+        if value:
+            # Check if email already exists for other users
+            user_id = self.instance.id if self.instance else None
+            if User.objects.filter(email=value).exclude(id=user_id).exists():
+                raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_username(self, value):
+        """Validate username uniqueness"""
+        if value:
+            # Check if username already exists for other users
+            user_id = self.instance.id if self.instance else None
+            if User.objects.filter(username=value).exclude(id=user_id).exists():
+                raise serializers.ValidationError("A user with this username already exists.")
+        return value
 
 
 class StudioGeneralInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Studio
-        fields = ['subdomain', 'name', 'bio']
+        fields = ['subdomain', 'name', 'tagline']
         read_only_fields = ['subdomain']  # Usually generated automatically
 
 
@@ -51,10 +75,10 @@ class StudioFullSerializer(serializers.ModelSerializer):
         fields = [
             'subdomain',
             'name',
-            'bio',
+            'tagline',
             'primary_color',
             'secondary_color',
-            'font_choice',
+            'font',
             'cover_photo',
             'packages',
             'domain',  # nested domain info
@@ -62,11 +86,47 @@ class StudioFullSerializer(serializers.ModelSerializer):
 
 
 
-
 class StudioSerializer(serializers.ModelSerializer):
+    photographer = UserSerializer()
+
     class Meta:
         model = Studio
-        fields = ["name", "slug", "custom_domain", "status", "primary_color", "secondary_color", "font_choice", "cover_photo"]
+        fields = [
+            "id", "name", "slug", "tagline", "about", "custom_domain",
+            "status", "primary_color", "secondary_color", "font",
+            "cover_photo", "photographer"
+        ]
+        read_only_fields = [
+            "id", "status", "custom_domain", "primary_color",
+            "secondary_color", "font", "cover_photo"
+        ]
+
+    def validate_name(self, value):
+        """Validate studio name"""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Studio name must be at least 2 characters long.")
+        return value.strip()
+
+    def update(self, instance, validated_data):
+        """Update studio and photographer data"""
+        user_data = validated_data.pop("photographer", None)
+
+        # Update studio fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update photographer fields if present
+        if user_data:
+            photographer = instance.photographer
+            user_serializer = UserSerializer(photographer, data=user_data, partial=True)
+            if user_serializer.is_valid(raise_exception=True):
+                user_serializer.save()
+
+        return instance
+
+
+
 
 
 class PhotographerSerializer(serializers.ModelSerializer):

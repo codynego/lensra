@@ -247,3 +247,49 @@ class SharedAccess(models.Model):
     def __str__(self):
         item = self.gallery or self.photo
         return f"{self.username} - {item} ({self.access_method})"
+
+
+
+# preferences/models.py
+
+from django.db import models
+from django.conf import settings
+
+class GalleryPreference(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gallery_preference"
+    )
+
+    # Example preferences — customize as needed
+    allow_public_view = models.BooleanField(default=True)
+    allow_downloads = models.BooleanField(default=False)
+    watermark_images = models.BooleanField(default=True)
+    watermark_text = models.CharField(
+        max_length=255, 
+        blank=True, 
+        null=True,
+        help_text="Text to use for watermarking images"
+    )
+    watermark_logo = models.ImageField(
+        upload_to='watermark_logos/', 
+        blank=True, 
+        null=True,
+        help_text="Logo to use for watermarking images"
+    )
+    items_per_page = models.PositiveIntegerField(default=20)
+    default_sort_order = models.CharField(
+        max_length=20,
+        choices=[
+            ("newest", "Newest First"),
+            ("oldest", "Oldest First"),
+            ("popular", "Most Viewed"),
+        ],
+        default="newest"
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username}'s Gallery Preferences"
