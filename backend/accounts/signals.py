@@ -6,6 +6,8 @@ import os
 from django.db.models.signals import post_delete
 from django.conf import settings
 from .models import User
+from subscription.models import UserSubscription, SubscriptionPlan
+from studio.models import Studio
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
@@ -23,3 +25,23 @@ def delete_profile_picture_on_user_delete(sender, instance, **kwargs):
     if instance.profile_picture:
         if os.path.isfile(instance.profile_picture.path):
             os.remove(instance.profile_picture.path)
+
+
+@receiver(post_save, sender=User)
+def create_user_subscription(sender, instance, created, **kwargs):
+    if created:
+        try:
+            default_plan = SubscriptionPlan.objects.get(name="Starter")
+        except SubscriptionPlan.DoesNotExist:
+            default_plan = None
+
+        UserSubscription.objects.create(
+            user=instance,
+            plan=default_plan
+        )
+
+
+@receiver(post_save, sender=Photographer)
+def create_photographer_studio(sender, instance, created, **kwargs):
+    if created:
+        Studio.objects.create(photographer=instance)

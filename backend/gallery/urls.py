@@ -24,6 +24,9 @@ from .views import (
     GalleryShareLinkView,
     PhotoShareLinkView,
     GalleryPreferenceView,
+    MovePhotoView,
+    EnableSelectionModeView,
+    PublicSelectionGalleryView,
 )
 
 urlpatterns = [
@@ -75,4 +78,9 @@ urlpatterns = [
     path('api/gallery/client/photos/', ClientAssignedPhotosView.as_view(), name='client-assigned-photos'),
 
     path('api/gallery/preferences/', GalleryPreferenceView.as_view(), name='gallery-preferences'),
+
+    path('api/gallery/photo/move/', MovePhotoView.as_view(), name='move-photo'),
+
+    path('api/gallery/enable-selection/', EnableSelectionModeView.as_view(), name='enable-selection-mode'),
+    path('gallery/public-selection/<str:token>/', PublicSelectionGalleryView.as_view(), name='public_selection_gallery'),
 ]

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'photographers',
     'django_hosts',
     'studio',
+    'subscription',
 ]
 SITE_ID = 1
 

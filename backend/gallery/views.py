@@ -14,12 +14,48 @@ from .serializers import (
     GalleryRecursiveSerializer, GalleryCreateSerializer, GalleryShareSerializer,
     PhotoShareSerializer, AddToGallerySerializer, PublicGallerySerializer,
     GalleryListSerializer, UserGalleriesSerializer, PhotoCreateSerializer,
-    GalleryVisibilitySerializer, PhotoVisibilitySerializer, ShareLinkToggleSerializer, GalleryPreferenceSerializer
+    GalleryVisibilitySerializer, PhotoVisibilitySerializer, ShareLinkToggleSerializer, 
+    GalleryPreferenceSerializer, EnableSelectionModeSerializer, PublicSelectionGallerySerializer
 )
 from rest_framework.pagination import PageNumberPagination
+from .serializers import MovePhotoSerializer
 
 
 User = get_user_model()
+
+
+class EnableSelectionModeView(generics.GenericAPIView):
+    serializer_class = EnableSelectionModeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        return Response({
+            "message": "Selection mode enabled.",
+            "gallery_id": result["gallery_id"],
+            "public_selection_url": result["public_selection_url"],
+            "liked_sub_gallery_id": result.get("liked_sub_gallery_id"),
+            "disliked_sub_gallery_id": result.get("disliked_sub_gallery_id"),
+            "sub_gallery_created": result.get("sub_gallery_created", False)
+        }, status=status.HTTP_200_OK)
+
+
+class MovePhotoView(generics.GenericAPIView):
+    serializer_class = MovePhotoSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        photo = serializer.save()
+        return Response({
+            "message": "Photo moved successfully.",
+            "photo_id": photo.id,
+            "new_gallery_id": photo.gallery.id
+        }, status=status.HTTP_200_OK)
+
 
 
 class GalleryPreferenceView(generics.GenericAPIView):
@@ -659,3 +695,22 @@ class GalleryAnalyticsView(APIView):
         ]
         
         return Response(analytics)
+
+
+class PublicSelectionGalleryView(APIView):
+    """
+    Returns the photos in a gallery (and sub-galleries) for public selection mode.
+    URL: /api/public-selection/<token>/
+    """
+
+    permission_classes = []  # public, no authentication required
+
+    def get(self, request, token, format=None):
+        # Fetch gallery by share token
+        gallery = get_object_or_404(Gallery, share_token=token)
+
+        serializer = PublicSelectionGallerySerializer(
+            gallery, context={'request': request}
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)

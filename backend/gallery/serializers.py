@@ -3,10 +3,17 @@ from .models import Gallery, Photo, PublicGallery, SharedAccess
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from studio.models import Studio
 
 User = get_user_model()
 
 from .models import GalleryPreference
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+
 
 class GalleryPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -86,6 +93,7 @@ class PhotoShareSerializer(serializers.Serializer):
         return instance
 
 
+
 class GalleryRecursiveSerializer(serializers.ModelSerializer):
     """Recursively serializes galleries with their sub-galleries and photos."""
     photos = PhotoSerializer(many=True, read_only=True)
@@ -93,21 +101,45 @@ class GalleryRecursiveSerializer(serializers.ModelSerializer):
     assigned_clients = UserSimpleSerializer(many=True, read_only=True)
     accessible_users = UserSimpleSerializer(many=True, read_only=True)
     share_url = serializers.ReadOnlyField()
+    slug = serializers.SerializerMethodField()
 
     class Meta:
         model = Gallery
         fields = [
-            "id", "title", "description", "created_at", "photos", "sub_galleries", 
-            "assigned_clients", "accessible_users", "visibility", 
-            "is_shareable_via_link", "share_url", "is_public"
+            "id",
+            "title",
+            "description",
+            "created_at",
+            "photos",
+            "sub_galleries",
+            "assigned_clients",
+            "accessible_users",
+            "visibility",
+            "is_shareable_via_link",
+            "share_url",
+            "is_public",
+            "slug"
         ]
 
     def get_sub_galleries(self, obj):
         return GalleryRecursiveSerializer(
-            obj.sub_galleries.all(), 
-            many=True, 
+            obj.sub_galleries.all(),
+            many=True,
             context=self.context
         ).data
+
+    def get_slug(self, obj):
+        """Return the slug for the gallery owner: use Studio slug if photographer, else username."""
+        user = obj.user
+        try:
+            studio = Studio.objects.get(photographer=user)
+            if studio.slug:
+                return studio.slug
+        except Studio.DoesNotExist:
+            pass
+        return user.username
+
+
 
 
 class GallerySerializer(serializers.ModelSerializer):
@@ -121,20 +153,36 @@ class GallerySerializer(serializers.ModelSerializer):
     access_type = serializers.SerializerMethodField()
     photo_count = serializers.SerializerMethodField()
     is_featured = serializers.SerializerMethodField()
+    slug = serializers.SerializerMethodField()  # <-- added
 
     class Meta:
         model = Gallery
         fields = [
-            "id", "user", "title", "description", "created_at", "photos", 
-            "sub_galleries", "assigned_clients", "accessible_users", "cover_image",
-            "visibility", "is_shareable_via_link", "share_url", "is_public", 
-            "can_share", "access_type", "photo_count", "is_featured"
+            "id",
+            "user",
+            "slug",  # <-- added
+            "title",
+            "description",
+            "created_at",
+            "photos",
+            "sub_galleries",
+            "assigned_clients",
+            "accessible_users",
+            "cover_image",
+            "visibility",
+            "is_shareable_via_link",
+            "share_url",
+            "is_public",
+            "can_share",
+            "access_type",
+            "photo_count",
+            "is_featured"
         ]
 
     def get_sub_galleries(self, obj):
         return GalleryRecursiveSerializer(
-            obj.sub_galleries.all(), 
-            many=True, 
+            obj.sub_galleries.all(),
+            many=True,
             context=self.context
         ).data
 
@@ -179,6 +227,18 @@ class GallerySerializer(serializers.ModelSerializer):
         if hasattr(obj, 'public_listing'):
             return obj.public_listing.featured
         return False
+
+    def get_slug(self, obj):
+        """Return the slug for the gallery owner: use Studio slug if photographer, else username."""
+        user = obj.user
+        try:
+            studio = Studio.objects.get(photographer=user)
+            if studio.slug:
+                return studio.slug
+        except Studio.DoesNotExist:
+            pass
+        return user.username
+
 
 
 class GalleryCreateSerializer(serializers.ModelSerializer):
@@ -379,13 +439,14 @@ class GalleryListSerializer(serializers.ModelSerializer):
     photo_count = serializers.SerializerMethodField()
     user_name = serializers.CharField(source='user.username', read_only=True)
     access_type = serializers.SerializerMethodField()
+    slug = serializers.SerializerMethodField()  # Added slug field
     
     class Meta:
         model = Gallery
         fields = [
             "id", "title", "description", "created_at", "cover_image", 
             "photo_count", "user_name", "visibility", 
-            "is_shareable_via_link", "is_public", "access_type"
+            "is_shareable_via_link", "is_public", "access_type", "slug"
         ]
     
     def get_cover_image(self, obj):
@@ -409,6 +470,17 @@ class GalleryListSerializer(serializers.ModelSerializer):
         elif obj.is_public:
             return 'public'
         return 'no_access'
+
+    def get_slug(self, obj):
+        """Return the slug for the gallery owner: use Studio slug if photographer, else username."""
+        user = obj.user
+        try:
+            studio = Studio.objects.get(photographer=user)
+            if studio.slug:
+                return studio.slug
+        except Studio.DoesNotExist:
+            pass
+        return user.username
 
 
 class UserGalleriesSerializer(serializers.Serializer):
@@ -455,3 +527,191 @@ class ShareLinkToggleSerializer(serializers.Serializer):
         instance.is_shareable_via_link = validated_data['is_shareable_via_link']
         instance.save()
         return instance
+
+
+
+class MovePhotoSerializer(serializers.Serializer):
+    photo_id = serializers.IntegerField()
+    target_gallery_id = serializers.IntegerField()
+
+    def validate(self, data):
+        photo_id = data.get('photo_id')
+        target_gallery_id = data.get('target_gallery_id')
+
+        try:
+            photo = Photo.objects.get(id=photo_id)
+        except Photo.DoesNotExist:
+            raise serializers.ValidationError("Photo not found.")
+
+        try:
+            target_gallery = Gallery.objects.get(id=target_gallery_id)
+        except Gallery.DoesNotExist:
+            raise serializers.ValidationError("Target gallery not found.")
+
+        # # Ensure the target gallery is public + selection mode enabled
+        # if not target_gallery.is_public or not target_gallery.selection_mode:
+        #     raise serializers.ValidationError("This gallery is not open for selection.")
+
+        # Optionally: Prevent moving a photo out of its original parent gallery
+        if photo.gallery_id == target_gallery.id:
+            raise serializers.ValidationError("Photo is already in this gallery.")
+
+        data['photo'] = photo
+        data['target_gallery'] = target_gallery
+        return data
+
+    def save(self, **kwargs):
+        photo = self.validated_data['photo']
+        target_gallery = self.validated_data['target_gallery']
+
+        # Move the photo into the target gallery
+        photo.gallery = target_gallery
+        photo.save()
+        return photo
+
+
+
+class EnableSelectionModeSerializer(serializers.Serializer):
+    gallery_id = serializers.IntegerField()
+
+    def validate_gallery_id(self, value):
+        user = self.context['request'].user
+        try:
+            gallery = Gallery.objects.get(id=value)
+        except Gallery.DoesNotExist:
+            raise serializers.ValidationError("Gallery not found.")
+
+        if gallery.user != user:
+            raise serializers.ValidationError("You do not have permission to modify this gallery.")
+
+        return value
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        gallery = Gallery.objects.get(id=self.validated_data['gallery_id'])
+
+        # Enable share link for the gallery
+        gallery.is_shareable_via_link = True
+        gallery.save()  # triggers share_token generation
+
+        # Create "Liked" and "Disliked" sub-galleries if they don't exist
+        liked_sub_gallery, liked_created = Gallery.objects.get_or_create(
+            parent_gallery=gallery,
+            title="Liked",
+            user=user
+        )
+        disliked_sub_gallery, disliked_created = Gallery.objects.get_or_create(
+            parent_gallery=gallery,
+            title="Disliked",
+            user=user
+        )
+
+        return {
+            "gallery_id": gallery.id,
+            "public_selection_url": gallery.public_selection_url,
+            "liked_sub_gallery_id": liked_sub_gallery.id,
+            "disliked_sub_gallery_id": disliked_sub_gallery.id,
+            "sub_galleries_created": liked_created or disliked_created
+        }
+
+
+
+class PublicPhotoSerializer(serializers.ModelSerializer):
+    # Return watermarked image URL
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Photo
+        fields = ['id', 'image_url', 'caption']
+
+    def get_image_url(self, obj):
+        # Replace with your watermark method if available
+        # e.g., obj.get_watermarked_url()
+        request = self.context.get('request')
+        if hasattr(obj, 'get_watermarked_url'):
+            url = obj.get_watermarked_url()
+        else:
+            url = obj.image.url
+        # Make it absolute if request is provided
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
+class PublicPhotoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Photo
+        fields = ['id', 'image', 'caption']
+
+
+class PublicSubGallerySerializer(serializers.ModelSerializer):
+    photos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Gallery
+        fields = ['id', 'title', 'description', 'photos']
+
+    def get_photos(self, obj):
+        photos = obj.photos.all()
+        return PublicPhotoSerializer(photos, many=True, context=self.context).data
+
+
+class PublicSelectionGallerySerializer(serializers.ModelSerializer):
+    photos = serializers.SerializerMethodField()
+    sub_galleries = serializers.SerializerMethodField()
+    public_selection_url = serializers.SerializerMethodField()
+    liked_sub_gallery_id = serializers.SerializerMethodField()
+    disliked_sub_gallery_id = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Gallery
+        fields = [
+            'id',
+            'title',
+            'name',
+            'description',
+            'share_token',
+            'public_selection_url',
+            'photos',
+            'sub_galleries',
+            'liked_sub_gallery_id',
+            'disliked_sub_gallery_id',
+        ]
+
+    def get_photos(self, obj):
+        photos = obj.photos.all()
+        return PublicPhotoSerializer(photos, many=True, context=self.context).data
+
+    def get_sub_galleries(self, obj):
+        sub_galleries = obj.sub_galleries.all()
+        return PublicSubGallerySerializer(sub_galleries, many=True, context=self.context).data
+
+    def get_name(self, obj):
+        """Return the name for the gallery owner: use Studio name if photographer, else username."""
+        user = obj.user
+        try:
+            studio = Studio.objects.get(photographer=user)
+            if studio.name:
+                return studio.name
+        except Studio.DoesNotExist:
+            pass
+        return user.username
+
+    def get_public_selection_url(self, obj):
+        request = self.context.get('request')
+        if obj.share_token:
+            from django.urls import reverse
+            url = reverse('public_selection_gallery', kwargs={'token': obj.share_token})
+            if request:
+                return request.build_absolute_uri(url)
+            return url
+        return None
+
+    def get_liked_sub_gallery_id(self, obj):
+        liked = obj.sub_galleries.filter(title__iexact="Liked").first()
+        return liked.id if liked else None
+
+    def get_disliked_sub_gallery_id(self, obj):
+        disliked = obj.sub_galleries.filter(title__iexact="Disliked").first()
+        return disliked.id if disliked else None
+

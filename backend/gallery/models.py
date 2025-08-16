@@ -21,6 +21,10 @@ class Gallery(models.Model):
     accessible_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='accessible_galleries', blank=True
     )
+    selection_mode = models.BooleanField(
+        default=False,
+        help_text="Enable selection mode for clients to select photos"
+    )
     parent_gallery = models.ForeignKey(
         'self',
         on_delete=models.CASCADE,
@@ -80,6 +84,14 @@ class Gallery(models.Model):
         if self.share_token and self.is_shareable_via_link:
             from django.urls import reverse
             return reverse('gallery-share', kwargs={'token': self.share_token})
+        return None
+
+    @property
+    def public_selection_url(self):
+        """Returns the public selection URL if selection mode is enabled."""
+        if self.selection_mode and self.share_token:
+            from django.urls import reverse
+            return reverse('public_selection_gallery', kwargs={'token': self.share_token})
         return None
 
     def add_user_access(self, user):
@@ -168,6 +180,8 @@ class Photo(models.Model):
             from django.urls import reverse
             return reverse('photo-share', kwargs={'token': self.share_token})
         return None
+
+    
 
     def add_user_access(self, user):
         """Add a user to accessible_users without creating duplicates."""
