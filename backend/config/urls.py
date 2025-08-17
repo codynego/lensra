@@ -33,7 +33,7 @@ urlpatterns = [
     path('api/bookings/', include('bookings.urls')),
     path('', include('gallery.urls')),
     path('api/studio/', include('studio.urls')),
-    path('api/subscription/', include('subscription.urls')),
+    path('api/subscriptions/', include('subscription.urls')),
     path("", landing_or_studio_home, name="home"),
 
 ]

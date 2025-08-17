@@ -12,7 +12,6 @@ const ClientForm = ({ client, onSave, onCancel }) => {
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/photographers';
 
   useEffect(() => {
     if (client) {
@@ -50,7 +49,7 @@ const ClientForm = ({ client, onSave, onCancel }) => {
     try {
       setLoading(true);
       
-      const url = client ? `${baseUrl}/clients/${client.id}/` : `${baseUrl}/clients/`;
+      const url = client ? `/photographers/clients/${client.id}/` : `/photographers/clients/`;
       const method = client ? 'PATCH' : 'POST';
       
       const response = await apiFetch(url, {

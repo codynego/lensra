@@ -63,7 +63,7 @@ const PhotoCard = ({
   const handleUpdateSharing = async (newVisibility, newShareableViaLink) => {
     setUpdating(true);
     try {
-      const response = await apiFetch(`http://127.0.0.1:8000/api/gallery/photos/${photo.id}/share/`, {
+      const response = await apiFetch(`/gallery/photos/${photo.id}/share/`, {
         method: 'PATCH',
         body: JSON.stringify({
           visibility: newVisibility,
@@ -322,7 +322,7 @@ const PhotoCard = ({
                     )}
                   </Menu.Item>
 
-                  <Menu.Item>
+                  {/* <Menu.Item>
                     {({ active }) => (
                       <button
                         onClick={(e) => {
@@ -339,7 +339,7 @@ const PhotoCard = ({
                         <span>Info</span>
                       </button>
                     )}
-                  </Menu.Item>
+                  </Menu.Item> */}
 
                   <div className="border-t border-gray-600"></div>
 

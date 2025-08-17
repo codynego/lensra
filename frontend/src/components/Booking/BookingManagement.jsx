@@ -18,7 +18,6 @@ import {
 import { useApi } from "../../useApi"; // Assuming useApi is in the same directory or adjust path
 import { useAuth } from "../../AuthContext"; // Adjust path as needed
 
-const API_BASE_URL = "http://localhost:8000/api/bookings"; // Adjust if needed
 
 const BookingManagement = () => {
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -52,9 +51,10 @@ const BookingManagement = () => {
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const response = await apiFetch(`${API_BASE_URL}/bookings/`);
+      const response = await apiFetch(`bookings/bookings/`);
       if (!response.ok) throw new Error("Failed to fetch bookings");
       const data = await response.json();
+      console.log("bookings")
       setBookings(data);
 
       // Calculate stats
@@ -62,7 +62,7 @@ const BookingManagement = () => {
       const totalBookings = data.length;
       const pendingBookings = data.filter(b => b.status === 'pending').length;
       const todaysBookings = data.filter(b => b.date === today).length;
-      const revenue = data.reduce((sum, b) => sum + (b.total_price || 0), 0);
+      const revenue = data.reduce((sum, b) => sum + parseFloat(b.total_price || 0), 0);
       setStats({ totalBookings, pendingBookings, todaysBookings, revenue });
     } catch (err) {
       setError(err.message || "Failed to fetch bookings");
@@ -74,7 +74,7 @@ const BookingManagement = () => {
   const fetchTimeSlots = async (date) => {
     const formattedDate = date.toISOString().split('T')[0];
     try {
-      const response = await apiFetch(`${API_BASE_URL}/time-slots/?date=${formattedDate}`);
+      const response = await apiFetch(`bookings/time-slots/?date=${formattedDate}`);
       if (!response.ok) throw new Error("Failed to fetch time slots");
       const data = await response.json();
       setTimeSlots(data.map(slot => ({ ...slot, is_available: !slot.is_booked })));
@@ -90,7 +90,7 @@ const BookingManagement = () => {
 
   const handleBookingAction = async (bookingId, action) => {
     try {
-      const response = await apiFetch(`${API_BASE_URL}/bookings/${bookingId}/`, {
+      const response = await apiFetch(`bookings/bookings/${bookingId}/`, {
         method: 'PATCH',
         body: JSON.stringify({ status: action }),
       });
@@ -109,7 +109,7 @@ const BookingManagement = () => {
     }
     
     try {
-      const response = await apiFetch(`${API_BASE_URL}/time-slots/`, {
+      const response = await apiFetch(`bookings/time-slots/`, {
         method: 'POST',
         body: JSON.stringify({
           date: newSlot.date,
@@ -130,7 +130,7 @@ const BookingManagement = () => {
 
   const deleteTimeSlot = async (slotId) => {
     try {
-      const response = await apiFetch(`${API_BASE_URL}/time-slots/${slotId}/`, {
+      const response = await apiFetch(`/bookings/time-slots/${slotId}/`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error("Failed to delete time slot");
@@ -147,7 +147,7 @@ const BookingManagement = () => {
     const newIsBooked = slot.is_available; // Since is_available = !is_booked
 
     try {
-      const response = await apiFetch(`${API_BASE_URL}/time-slots/${slotId}/`, {
+      const response = await apiFetch(`bookings/time-slots/${slotId}/`, {
         method: 'PATCH',
         body: JSON.stringify({ is_booked: newIsBooked }),
       });
@@ -160,21 +160,21 @@ const BookingManagement = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
+      case 'confirmed': return 'bg-green-100 text-green-800 border-green-200';
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
+      case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
       case 'upcoming': return 'bg-blue-100 text-blue-800 border-blue-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   const filteredBookings = bookings.filter(booking => {
-    if (activeTab === 'upcoming') return ['approved', 'upcoming'].includes(booking.status);
+   
+    if (activeTab === 'upcoming') return ['confirmed', 'upcoming'].includes(booking.status);
     if (activeTab === 'pending') return booking.status === 'pending';
-    if (activeTab === 'past') return ['rejected'].includes(booking.status);
+    if (activeTab === 'past') return ['cancelled'].includes(booking.status);
     return true;
   });
-
   // Simple calendar component
   const Calendar = () => {
     const today = new Date();
@@ -451,14 +451,14 @@ const BookingManagement = () => {
                             {activeTab === "pending" && (
                               <>
                                 <button
-                                  onClick={() => handleBookingAction(booking.id, "approved")}
+                                  onClick={() => handleBookingAction(booking.id, "confirmed")}
                                   className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                   aria-label="Approve"
                                 >
                                   <CheckIcon className="w-5 h-5" />
                                 </button>
                                 <button
-                                  onClick={() => handleBookingAction(booking.id, "rejected")}
+                                  onClick={() => handleBookingAction(booking.id, "cancelled")}
                                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                   aria-label="Reject"
                                 >
@@ -527,14 +527,14 @@ const BookingManagement = () => {
                 {selectedBooking.status === 'pending' && (
                   <div className="flex space-x-3 mt-6">
                     <button
-                      onClick={() => handleBookingAction(selectedBooking.id, "rejected")}
+                      onClick={() => handleBookingAction(selectedBooking.id, "cancelled")}
                       className="flex-1 flex items-center justify-center px-4 py-2 text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
                     >
                       <XIcon className="w-4 h-4 mr-2" />
                       Reject
                     </button>
                     <button
-                      onClick={() => handleBookingAction(selectedBooking.id, "approved")}
+                      onClick={() => handleBookingAction(selectedBooking.id, "confirmed")}
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                     >
                       <CheckIcon className="w-4 h-4 mr-2" />

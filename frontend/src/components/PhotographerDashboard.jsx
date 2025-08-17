@@ -5,6 +5,9 @@ import Sidebar from './Sidebar';
 import GalleryContent from './Gallery/GalleryContent';
 import BookingManagement from './Booking/BookingManagement';
 import ClientManagement from './Clients/ClientManagement';
+import PhotographerSetup from './website/PhotographerSetup';
+import Settings from './settings/Settings';
+import AiToolSetup from './AiToolSetup';
 
 const BRAND_COLOR = '#dd183b';
 
@@ -48,6 +51,9 @@ const PhotographerDashboard = () => {
         {activeTab === 'Bookings' && <BookingManagement />}
         {activeTab === 'Gallery' && <GalleryContent />}
         {activeTab === 'Clients' && <ClientManagement />}
+        {activeTab === 'Studio' && <PhotographerSetup />}
+        {activeTab === 'AI Tools' && <AiToolSetup />}
+        {activeTab === 'Settings' && <Settings />}
         {/* Add other components for different tabs as needed */}
       </main>
     </div>

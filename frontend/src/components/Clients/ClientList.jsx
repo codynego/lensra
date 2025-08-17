@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Calendar, DollarSign, User, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Edit2, Trash2, Calendar, DollarSign, User, Eye, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../../useApi';
 
 const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
   const { apiFetch } = useApi();
+  const navigate = useNavigate();
+  const apiFetchRef = useRef(apiFetch); // Cache apiFetch to avoid re-renders
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,58 +16,114 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10); // Matches backend PAGE_SIZE
   const [totalCount, setTotalCount] = useState(0);
-  const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/photographers';
+  const [userStats, setUserStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Update apiFetchRef when apiFetch changes
+  useEffect(() => {
+    console.log('Updating apiFetchRef');
+    apiFetchRef.current = apiFetch;
+  }, [apiFetch]);
+
+  // Fetch user stats to check plan limits
+  async function loadUserStats() {
+    let isMounted = true;
+    try {
+      console.log('Fetching /subscriptions/me/stats/');
+      setStatsLoading(true);
+      const response = await apiFetchRef.current('/subscriptions/me/stats/');
+      if (!response || !response.ok) {
+        throw new Error('Failed to fetch user stats');
+      }
+      const data = await response.json();
+      if (isMounted) {
+        setUserStats(data);
+      }
+    } catch (err) {
+      console.error('Error loading user stats:', err);
+      // Don't set error for stats failure - component should still work
+    } finally {
+      if (isMounted) {
+        setStatsLoading(false);
+      }
+    }
+  }
+
+  // Fetch clients with pagination
+  async function loadClients() {
+    let isMounted = true;
+    try {
+      console.log(`Fetching /photographers/clients/?page=${currentPage}&page_size=${pageSize}`);
+      setLoading(true);
+      setError(null);
+      const response = await apiFetchRef.current(`/photographers/clients/?page=${currentPage}&page_size=${pageSize}`);
+      if (!response || !response.ok) {
+        throw new Error('Failed to load clients');
+      }
+      const data = await response.json();
+      if (isMounted) {
+        setClients(data.results || []);
+        setTotalCount(data.count || 0);
+      }
+    } catch (err) {
+      if (isMounted) {
+        setError('Failed to load clients');
+        console.error('Error loading clients:', err);
+      }
+    } finally {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }
+  }
+
+  // Fetch stats and clients separately
+  useEffect(() => {
+    loadUserStats();
+  }, []); // Run once on mount
 
   useEffect(() => {
     loadClients();
-  }, [currentPage]);
+  }, [currentPage, pageSize]); // Run when pagination changes
 
-  const loadClients = async () => {
-    try {
-      setLoading(true);
-      const response = await apiFetch(`${baseUrl}/clients/?page=${currentPage}&page_size=${pageSize}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      const data = await response.json();
-      setClients(data.results || []);
-      setTotalCount(data.count || 0);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load clients');
-      console.error('Error loading clients:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteClient = async (id) => {
+  async function handleDeleteClient(id) {
     if (window.confirm('Are you sure you want to delete this client?')) {
       try {
-        const response = await apiFetch(`${baseUrl}/clients/${id}/`, {
+        console.log(`Deleting /photographers/clients/${id}/`);
+        const response = await apiFetchRef.current(`/photographers/clients/${id}/`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
         });
-        if (!response.ok) {
-          throw new Error(`Failed to delete client: ${response.status}`);
+        if (!response || !response.ok) {
+          throw new Error(`Failed to delete client: ${response?.status || 'No response'}`);
         }
         await loadClients(); // Refresh the client list
+        await loadUserStats(); // Refresh stats after deletion
       } catch (err) {
         alert('Failed to delete client');
         console.error('Error deleting client:', err);
       }
     }
-  };
+  }
+
+  function handleCreateClientClick() {
+    if (userStats && userStats.plan_limits) {
+      const maxClients = userStats.plan_limits.max_clients_count;
+      const currentClients = userStats.clients_count || 0;
+      if (maxClients !== -1 && currentClients >= maxClients) {
+        console.log('Client limit reached, navigating to /upgrade');
+        navigate('/upgrade');
+        return;
+      }
+    }
+    console.log('Creating new client');
+    onCreateClient();
+  }
 
   const filteredAndSortedClients = clients
     .filter(client => {
       const matchesSearch = client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            client.email?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterStatus === 'all' || 
+      const matchesFilter = filterStatus === 'all' ||
                            (filterStatus === 'active' && (client.total_bookings > 0)) ||
                            (filterStatus === 'inactive' && (client.total_bookings === 0));
       return matchesSearch && matchesFilter;
@@ -86,10 +145,36 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  const handlePageChange = (newPage) => {
+  function handlePageChange(newPage) {
     if (newPage >= 1 && newPage <= totalPages) {
+      console.log('Changing page to:', newPage);
       setCurrentPage(newPage);
     }
+  }
+
+  function isAtClientLimit() {
+    if (!userStats || !userStats.plan_limits) return false;
+    const maxClients = userStats.plan_limits.max_clients_count;
+    const currentClients = userStats.clients_count || 0;
+    return maxClients !== -1 && currentClients >= maxClients;
+  }
+
+  function getClientUsageInfo() {
+    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    const maxClients = userStats.plan_limits.max_clients_count;
+    const currentClients = userStats.clients_count || 0;
+    if (maxClients === -1) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    const percentage = (currentClients / maxClients) * 100;
+    const isAtLimit = currentClients >= maxClients;
+    let color = '#10B981'; // green
+    if (percentage >= 100) color = '#EF4444'; // red
+    else if (percentage >= 80) color = '#F59E0B'; // yellow
+    return { percentage, color, isAtLimit };
+  }
+
+  const formatLimit = (limit) => {
+    if (limit === -1) return '∞';
+    return limit.toLocaleString();
   };
 
   if (loading) {
@@ -114,18 +199,76 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
     );
   }
 
+  const clientUsage = getClientUsageInfo();
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-        <button
-          onClick={onCreateClient}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          Add Client
-        </button>
+        
+        <div className="flex items-center gap-4">
+          {userStats && userStats.plan_limits && userStats.plan_limits.max_clients_count !== -1 && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span>
+                {userStats.clients_count || 0} / {formatLimit(userStats.plan_limits.max_clients_count)} clients
+              </span>
+              <div className="w-20 bg-gray-200 rounded-full h-2">
+                <div
+                  className="h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min(clientUsage.percentage, 100)}%`,
+                    backgroundColor: clientUsage.color,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          
+          <button
+            onClick={handleCreateClientClick}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+              isAtClientLimit()
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isAtClientLimit() ? (
+              <>
+                <Zap className="w-4 h-4" />
+                Upgrade Plan
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                Add Client
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {isAtClientLimit() && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex-shrink-0">
+              <Zap className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-amber-800 font-medium">Client limit reached</p>
+              <p className="text-amber-700 text-sm mt-1">
+                You've reached your plan's limit of {formatLimit(userStats.plan_limits.max_clients_count)} clients. 
+                <button
+                  onClick={() => navigate('/upgrade')}
+                  className="underline hover:no-underline ml-1"
+                >
+                  Upgrade your plan
+                </button>
+                {' '}to add more clients.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -167,7 +310,14 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
             <User className="w-5 h-5 text-blue-600" />
             <span className="text-blue-600 font-medium">Total Clients</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{totalCount}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
+            {userStats && userStats.plan_limits && userStats.plan_limits.max_clients_count !== -1 && (
+              <span className="text-sm text-gray-500">
+                / {formatLimit(userStats.plan_limits.max_clients_count)}
+              </span>
+            )}
+          </div>
         </div>
         
         <div className="bg-green-50 p-4 rounded-lg">

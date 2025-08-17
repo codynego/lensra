@@ -38,7 +38,7 @@ export default function RegisterForm() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/accounts/register/",
+        "http://lvh.me:8000/api/accounts/register/",
         {
           method: "POST",
           headers: {

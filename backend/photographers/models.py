@@ -15,7 +15,7 @@ class Photographer(models.Model):
 
 class Client(models.Model):
     photographer = models.ForeignKey(
-        'Photographer',  # Reference to your Photographer model
+        'Photographer',
         on_delete=models.CASCADE,
         related_name="clients"
     )

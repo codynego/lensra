@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
 import GalleryCard from "./GalleryCard";
 import GalleryView from "./GalleryView";
-import axios from "axios";
-import { useAuth } from "../../AuthContext"; 
-
-const API_BASE_URL = "http://localhost:8000/api";
+import { useAuth } from "../../AuthContext";
+import { useApi } from "../../useApi";
 
 const GalleryContent = () => {
   const [galleries, setGalleries] = useState([]);
@@ -15,18 +13,19 @@ const GalleryContent = () => {
   const [error, setError] = useState(null);
   const [selectedGallery, setSelectedGallery] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { token, isAuthenticated } = useAuth(); // Get token and isAuthenticated
-  const [activeTab, setActiveTab] = useState('my-galleries'); // 'my-galleries', 'shared', 'public'
+  const { isAuthenticated } = useAuth();
+  const { apiFetch } = useApi();
+  const [activeTab, setActiveTab] = useState("my-galleries");
   const [organizedGalleries, setOrganizedGalleries] = useState({
     owned_galleries: [],
     assigned_galleries: [],
-    shared_galleries: []
+    shared_galleries: [],
   });
 
   useEffect(() => {
-    if (activeTab === 'my-galleries') {
+    if (activeTab === "my-galleries") {
       fetchOrganizedGalleries();
-    } else if (activeTab === 'public') {
+    } else if (activeTab === "public") {
       fetchPublicGalleries();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -39,37 +38,31 @@ const GalleryContent = () => {
 
   const fetchOrganizedGalleries = async () => {
     if (!isAuthenticated) return;
-    
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/user/galleries/`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await apiFetch("/gallery/user/galleries/", {
+        method: "GET",
       });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
 
-      const data = await res.json();
+      const data = await response.json();
       setOrganizedGalleries({
         owned_galleries: (data.owned_galleries || []).map(normalizeGallery),
         assigned_galleries: (data.assigned_galleries || []).map(normalizeGallery),
-        shared_galleries: (data.shared_galleries || []).map(normalizeGallery)
+        shared_galleries: (data.shared_galleries || []).map(normalizeGallery),
       });
       console.log("Fetched organized galleries:", data);
-      
-      // Set combined galleries for backward compatibility
+
       const allGalleries = [
         ...(data.owned_galleries || []),
         ...(data.assigned_galleries || []),
-        ...(data.shared_galleries || [])
+        ...(data.shared_galleries || []),
       ].map(normalizeGallery);
       setGalleries(allGalleries);
-      
     } catch (err) {
       console.error("fetchOrganizedGalleries error:", err);
       setError(err.message || "Failed to fetch galleries");
@@ -82,19 +75,16 @@ const GalleryContent = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/public/galleries/`, {
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await apiFetch("/gallery/public/galleries/", {
+        method: "GET",
       });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
 
-      const data = await res.json();
+      const data = await response.json();
       const items = Array.isArray(data) ? data : data.results || [];
-      setPublicGalleries(items.map(item => normalizeGallery(item.gallery)));
+      setPublicGalleries(items.map((item) => normalizeGallery(item.gallery)));
     } catch (err) {
       console.error("fetchPublicGalleries error:", err);
       setError(err.message || "Failed to fetch public galleries");
@@ -112,32 +102,26 @@ const GalleryContent = () => {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/gallery/galleries/create/`, {
+      const response = await apiFetch("/gallery/galleries/create/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           title: newGalleryTitle,
-          description: ""
+          description: "",
         }),
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
+      if (!response.ok) {
+        const errorData = await response.json();
         throw new Error(errorData.detail || errorData.error || "Failed to create gallery.");
       }
 
-      const data = await res.json();
+      const data = await response.json();
       const newGallery = normalizeGallery(data);
-      
-      // Add to owned galleries
-      setOrganizedGalleries(prev => ({
+
+      setOrganizedGalleries((prev) => ({
         ...prev,
-        owned_galleries: [newGallery, ...prev.owned_galleries]
+        owned_galleries: [newGallery, ...prev.owned_galleries],
       }));
-      
+
       setNewGalleryTitle("");
       setShowCreateForm(false);
     } catch (err) {
@@ -155,27 +139,24 @@ const GalleryContent = () => {
     }
 
     try {
-      const res = await axios.post(
-        `${API_BASE_URL}/gallery/add-to-collection/`,
-        { gallery_id: gallery.id },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await apiFetch("/gallery/add-to-collection/", {
+        method: "POST",
+        body: JSON.stringify({ gallery_id: gallery.id }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to add gallery to collection.");
+      }
 
       alert("Gallery added to your collection!");
-      
-      // Add to shared galleries
-      setOrganizedGalleries(prev => ({
+
+      setOrganizedGalleries((prev) => ({
         ...prev,
-        shared_galleries: [normalizeGallery(gallery), ...prev.shared_galleries]
+        shared_galleries: [normalizeGallery(gallery), ...prev.shared_galleries],
       }));
-      
     } catch (err) {
       console.error("Error adding to collection:", err);
-      alert(err.response?.data?.detail || "Failed to add gallery to collection.");
+      alert(err.message || "Failed to add gallery to collection.");
     }
   };
 
@@ -193,11 +174,11 @@ const GalleryContent = () => {
 
   const getCurrentGalleries = () => {
     switch (activeTab) {
-      case 'my-galleries':
+      case "my-galleries":
         return organizedGalleries.owned_galleries;
-      case 'shared':
+      case "shared":
         return [...organizedGalleries.assigned_galleries, ...organizedGalleries.shared_galleries];
-      case 'public':
+      case "public":
         return publicGalleries;
       default:
         return [];
@@ -206,38 +187,38 @@ const GalleryContent = () => {
 
   const getTabTitle = () => {
     switch (activeTab) {
-      case 'my-galleries':
-        return 'My Galleries';
-      case 'shared':
-        return 'Shared with Me';
-      case 'public':
-        return 'Public Galleries';
+      case "my-galleries":
+        return "My Galleries";
+      case "shared":
+        return "Shared with Me";
+      case "public":
+        return "Public Galleries";
       default:
-        return 'Galleries';
+        return "Galleries";
     }
   };
 
   const getEmptyStateMessage = () => {
     switch (activeTab) {
-      case 'my-galleries':
+      case "my-galleries":
         return {
           title: "No galleries found.",
-          subtitle: "Create your first gallery to get started!"
+          subtitle: "Create your first gallery to get started!",
         };
-      case 'shared':
+      case "shared":
         return {
           title: "No shared galleries.",
-          subtitle: "Galleries shared with you will appear here."
+          subtitle: "Galleries shared with you will appear here.",
         };
-      case 'public':
+      case "public":
         return {
           title: "No public galleries available.",
-          subtitle: "Check back later for new public content!"
+          subtitle: "Check back later for new public content!",
         };
       default:
         return {
           title: "No galleries found.",
-          subtitle: ""
+          subtitle: "",
         };
     }
   };
@@ -250,7 +231,6 @@ const GalleryContent = () => {
     );
   }
 
-  // If a gallery is selected, show the GalleryView component
   if (selectedGallery) {
     return (
       <div className="p-3 sm:p-6">
@@ -263,7 +243,6 @@ const GalleryContent = () => {
           gallery={selectedGallery}
           onBack={handleBackToGalleries}
           onError={handleError}
-          token={token}
         />
       </div>
     );
@@ -274,49 +253,48 @@ const GalleryContent = () => {
 
   return (
     <div className="p-3 sm:p-6">
-      {/* Tab Navigation */}
       <div className="mb-6">
         <div className="flex flex-wrap gap-2 mb-4 border-b border-gray-700">
           <button
-            onClick={() => setActiveTab('my-galleries')}
+            onClick={() => setActiveTab("my-galleries")}
             className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
-              activeTab === 'my-galleries'
-                ? 'bg-[#dd183b] text-white border-b-2 border-[#dd183b]'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              activeTab === "my-galleries"
+                ? "bg-[#dd183b] text-white border-b-2 border-[#dd183b]"
+                : "text-gray-400 hover:text-white hover:bg-gray-700"
             }`}
           >
             My Galleries ({organizedGalleries.owned_galleries.length})
           </button>
-          
+
           {isAuthenticated && (
             <button
-              onClick={() => setActiveTab('shared')}
+              onClick={() => setActiveTab("shared")}
               className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
-                activeTab === 'shared'
-                  ? 'bg-[#dd183b] text-white border-b-2 border-[#dd183b]'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                activeTab === "shared"
+                  ? "bg-[#dd183b] text-white border-b-2 border-[#dd183b]"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700"
               }`}
             >
-              Shared ({organizedGalleries.assigned_galleries.length + organizedGalleries.shared_galleries.length})
+              Shared (
+              {organizedGalleries.assigned_galleries.length + organizedGalleries.shared_galleries.length}
+              )
             </button>
           )}
-          
+
           <button
-            onClick={() => setActiveTab('public')}
+            onClick={() => setActiveTab("public")}
             className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
-              activeTab === 'public'
-                ? 'bg-[#dd183b] text-white border-b-2 border-[#dd183b]'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              activeTab === "public"
+                ? "bg-[#dd183b] text-white border-b-2 border-[#dd183b]"
+                : "text-gray-400 hover:text-white hover:bg-gray-700"
             }`}
           >
             Public Galleries
           </button>
         </div>
 
-        {/* Create Gallery Section - Only show for My Galleries tab */}
-        {activeTab === 'my-galleries' && isAuthenticated && (
+        {activeTab === "my-galleries" && isAuthenticated && (
           <>
-            {/* Mobile: Show create button */}
             <div className="flex items-center justify-between mb-4 sm:hidden">
               <h2 className="text-xl font-bold text-white">{getTabTitle()}</h2>
               <button
@@ -330,7 +308,6 @@ const GalleryContent = () => {
               </button>
             </div>
 
-            {/* Mobile: Create form (shown conditionally) */}
             {showCreateForm && (
               <div className="mb-4 sm:hidden">
                 <div className="flex flex-col gap-3">
@@ -367,7 +344,6 @@ const GalleryContent = () => {
               </div>
             )}
 
-            {/* Desktop: Original layout */}
             <div className="hidden sm:flex flex-wrap gap-2 items-center justify-between">
               <h2 className="text-2xl font-bold text-white">{getTabTitle()}</h2>
               <div className="flex gap-2 items-center">
@@ -394,8 +370,7 @@ const GalleryContent = () => {
           </>
         )}
 
-        {/* Title for other tabs */}
-        {activeTab !== 'my-galleries' && (
+        {activeTab !== "my-galleries" && (
           <div className="hidden sm:block">
             <h2 className="text-2xl font-bold text-white">{getTabTitle()}</h2>
           </div>
@@ -408,11 +383,20 @@ const GalleryContent = () => {
         </div>
       )}
 
-      {/* Gallery Grid */}
       {currentGalleries.length === 0 ? (
         <div className="text-center py-12">
-          <svg className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          <svg
+            className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+            />
           </svg>
           <p className="text-gray-400 text-base sm:text-lg">{emptyState.title}</p>
           <p className="text-gray-500 text-sm mt-2">{emptyState.subtitle}</p>
@@ -426,26 +410,20 @@ const GalleryContent = () => {
               onClick={handleSelectGallery}
               onEdit={async (g, newTitle) => {
                 try {
-                  const res = await fetch(
-                    `${API_BASE_URL}/gallery/galleries/${g.id}/`,
-                    {
-                      method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                      },
-                      body: JSON.stringify({ title: newTitle }),
-                    }
-                  );
-                  if (!res.ok) throw new Error("Failed to rename gallery");
-                  const updated = await res.json();
+                  const response = await apiFetch(`/gallery/galleries/${g.id}/`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ title: newTitle }),
+                  });
+                  if (!response.ok) throw new Error("Failed to rename gallery");
+                  const updated = await response.json();
                   const normalizedUpdated = normalizeGallery(updated);
-                  
-                  // Update in the appropriate category
-                  if (activeTab === 'my-galleries') {
-                    setOrganizedGalleries(prev => ({
+
+                  if (activeTab === "my-galleries") {
+                    setOrganizedGalleries((prev) => ({
                       ...prev,
-                      owned_galleries: prev.owned_galleries.map(x => x.id === g.id ? normalizedUpdated : x)
+                      owned_galleries: prev.owned_galleries.map((x) =>
+                        x.id === g.id ? normalizedUpdated : x
+                      ),
                     }));
                   }
                 } catch (err) {
@@ -455,22 +433,15 @@ const GalleryContent = () => {
               }}
               onDelete={async (g) => {
                 try {
-                  const res = await fetch(
-                    `${API_BASE_URL}/gallery/galleries/${g.id}/`,
-                    {
-                      method: "DELETE",
-                      headers: {
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                      },
-                    }
-                  );
-                  if (!res.ok) throw new Error("Failed to delete gallery");
-                  
-                  // Remove from the appropriate category
-                  if (activeTab === 'my-galleries') {
-                    setOrganizedGalleries(prev => ({
+                  const response = await apiFetch(`/gallery/galleries/${g.id}/`, {
+                    method: "DELETE",
+                  });
+                  if (!response.ok) throw new Error("Failed to delete gallery");
+
+                  if (activeTab === "my-galleries") {
+                    setOrganizedGalleries((prev) => ({
                       ...prev,
-                      owned_galleries: prev.owned_galleries.filter(x => x.id !== g.id)
+                      owned_galleries: prev.owned_galleries.filter((x) => x.id !== g.id),
                     }));
                   }
                 } catch (err) {
@@ -482,24 +453,34 @@ const GalleryContent = () => {
                 setSelectedGallery(gallery);
               }}
               onSubGalleryCreated={async (parentId, newSubGallery) => {
-                // For top-level galleries, just refresh the organized galleries
                 await fetchOrganizedGalleries();
               }}
               onAddToCollection={handleAddToCollection}
-              showAddToCollection={activeTab === 'public' || (activeTab === 'shared' && gallery.access_type === 'public')}
+              showAddToCollection={
+                activeTab === "public" || (activeTab === "shared" && gallery.access_type === "public")
+              }
             />
           ))}
         </div>
       )}
 
-      {/* Shared galleries breakdown for shared tab */}
-      {activeTab === 'shared' && isAuthenticated && (
+      {activeTab === "shared" && isAuthenticated && (
         <div className="mt-8">
           {organizedGalleries.assigned_galleries.length > 0 && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <svg
+                  className="w-5 h-5 mr-2 text-blue-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
                 Assigned by Photographers ({organizedGalleries.assigned_galleries.length})
               </h3>
@@ -519,8 +500,18 @@ const GalleryContent = () => {
           {organizedGalleries.shared_galleries.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                <svg
+                  className="w-5 h-5 mr-2 text-green-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                  />
                 </svg>
                 Added from Sharing ({organizedGalleries.shared_galleries.length})
               </h3>
@@ -539,18 +530,28 @@ const GalleryContent = () => {
         </div>
       )}
 
-      {/* Login prompt for non-authenticated users */}
-      {!isAuthenticated && activeTab !== 'public' && (
+      {!isAuthenticated && activeTab !== "public" && (
         <div className="mt-8 text-center p-6 bg-gray-800 rounded-lg">
-          <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          <svg
+            className="w-12 h-12 text-gray-400 mx-auto mb-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
           </svg>
           <h3 className="text-lg font-semibold text-white mb-2">Login Required</h3>
-          <p className="text-gray-400 mb-4">Please log in to access your personal galleries and shared content.</p>
+          <p className="text-gray-400 mb-4">
+            Please log in to access your personal galleries and shared content.
+          </p>
           <button
             onClick={() => {
-              // Redirect to login or trigger login modal
-              window.location.href = '/login';
+              window.location.href = "/login";
             }}
             className="px-6 py-2 bg-[#dd183b] text-white rounded-lg hover:bg-red-700 transition-colors"
           >

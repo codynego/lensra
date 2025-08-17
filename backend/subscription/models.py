@@ -24,3 +24,22 @@ class UserSubscription(models.Model):
 
     def __str__(self):
         return f"{self.user} → {self.plan}"
+
+
+class Stats(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE, 
+        related_name="stats"
+    )
+
+    galleries_count = models.PositiveIntegerField(default=0)
+    photos_count = models.PositiveIntegerField(default=0)
+    clients_count = models.PositiveIntegerField(default=0)
+    bookings_count = models.PositiveIntegerField(default=0)
+    storage_used = models.BigIntegerField(default=0)  # bytes
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Stats for {self.user.username}"

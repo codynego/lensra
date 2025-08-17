@@ -3,7 +3,7 @@ import { Calendar, DollarSign, User, ChevronRight, Edit2, Plus, Mail, Phone, X, 
 import { useApi } from '../../useApi';
 
 // API base URL from environment variable or fallback
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://lvh.me:8000';
 
 const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
   const { apiFetch } = useApi();
@@ -36,7 +36,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
   const loadClientBookings = async () => {
     try {
       setLoadingBookings(true);
-      const response = await apiFetch(`${API_BASE_URL}/api/bookings/bookings/`, {
+      const response = await apiFetch(`/bookings/bookings/`, {
         method: 'GET',
       });
       if (!response.ok) {
@@ -65,7 +65,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       setLoadingPackages(true);
       console.log('=== LOADING PACKAGES ===');
       
-      const response = await apiFetch(`${API_BASE_URL}/api/bookings/packages/`, {
+      const response = await apiFetch(`/bookings/packages/`, {
         method: 'GET',
       });
       
@@ -102,7 +102,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
     try {
       setLoadingTimeSlots(true);
       
-      const url = `${API_BASE_URL}/api/bookings/time-slots/?photographer=${encodeURIComponent(photographerId)}&date=${encodeURIComponent(date)}`;
+      const url = `/bookings/time-slots/?photographer=${encodeURIComponent(photographerId)}&date=${encodeURIComponent(date)}`;
       console.log('🌐 Request URL:', url);
       
       const response = await apiFetch(url, {
@@ -155,12 +155,13 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       console.log('✅ Selected package:', selectedPackage);
 
       if (selectedPackage) {
-        // Reset time slot selection
+        // Reset time slot selection when package changes
         setFormData((prev) => ({
           ...prev,
           start_time: ''
         }));
         setSelectedSlotId(null);
+        console.log('🔄 Reset slot selection due to package change');
 
         // Set selected photographer ID
         const photographerId = selectedPackage.photographer;
@@ -185,9 +186,10 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       const currentPackage = packages.find((pkg) => pkg.id === parseInt(formData.package, 10));
 
       if (currentPackage?.photographer) {
-        // Reset time slot selection
+        // Reset time slot selection when date changes
         setFormData((prev) => ({ ...prev, start_time: '' }));
         setSelectedSlotId(null);
+        console.log('🔄 Reset slot selection due to date change');
         
         const photographerId = selectedPhotographerId || currentPackage.photographer;
         loadTimeSlots(value, photographerId);
@@ -203,15 +205,35 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       const selectedSlot = timeSlots.find(slot => slot.start_time === value);
       if (selectedSlot) {
         setSelectedSlotId(selectedSlot.id);
-        console.log('🕐 Selected slot ID:', selectedSlot.id);
+        console.log('🕐 Selected slot:', {
+          id: selectedSlot.id,
+          start_time: selectedSlot.start_time,
+          end_time: selectedSlot.end_time
+        });
+      } else {
+        console.warn('⚠️ Could not find slot for start_time:', value);
+        setSelectedSlotId(null);
       }
+    }
+
+    // Reset slot selection when start_time is cleared
+    if (name === 'start_time' && !value) {
+      setSelectedSlotId(null);
+      console.log('🔄 Cleared slot selection');
     }
   };
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.package) errors.package = 'Please select a package';
-    if (!formData.date) errors.date = 'Please select a date';
+    
+    if (!formData.package) {
+      errors.package = 'Please select a package';
+    }
+    
+    if (!formData.date) {
+      errors.date = 'Please select a date';
+    }
+    
     if (!formData.start_time) {
       errors.start_time = 'Please select a time slot';
     } else {
@@ -219,10 +241,23 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       const selectedSlot = timeSlots.find(slot => slot.start_time === formData.start_time);
       if (!selectedSlot) {
         errors.start_time = 'Selected time slot is not available';
+      } else if (!selectedSlotId) {
+        errors.start_time = 'Invalid time slot selection';
       }
     }
-    if (!formData.location.trim()) errors.location = 'Please enter a location';
-    if (!selectedPhotographerId) errors.photographer = 'No photographer selected';
+    
+    if (!formData.location.trim()) {
+      errors.location = 'Please enter a location';
+    }
+    
+    if (!selectedPhotographerId) {
+      errors.photographer = 'No photographer selected';
+    }
+    
+    // Additional validation for slot ID
+    if (formData.start_time && !selectedSlotId) {
+      errors.start_time = 'Time slot ID is missing. Please reselect the time slot.';
+    }
     
     return errors;
   };
@@ -243,7 +278,11 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       const selectedPackage = packages.find((pkg) => pkg.id === parseInt(formData.package, 10));
       
       if (!selectedPackage || !selectedPhotographerId || !selectedSlotId) {
-        console.log('❌ Missing required data');
+        console.log('❌ Missing required data:', {
+          selectedPackage: !!selectedPackage,
+          selectedPhotographerId: !!selectedPhotographerId,
+          selectedSlotId: !!selectedSlotId
+        });
         setFormErrors({ general: 'Invalid package, photographer, or time slot selected.' });
         return;
       }
@@ -257,12 +296,13 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
         start_time: formData.start_time,
         location: formData.location.trim(),
         notes: formData.notes.trim() || '',
-        slot_id: selectedSlotId, // Include slot_id as expected by the view
+        slot_id: selectedSlotId, // CRITICAL: Include slot_id as expected by the view
+        time_slot_id: selectedSlotId, // Alternative field name in case backend expects this
       };
 
-      console.log('📤 Submitting booking:', payload);
+      console.log('📤 Submitting booking payload:', payload);
 
-      const response = await apiFetch(`${API_BASE_URL}/api/bookings/bookings/`, {
+      const response = await apiFetch(`/bookings/bookings/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -298,6 +338,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
           status: response.status,
           statusText: response.statusText,
           errorData,
+          payload // Log the payload for debugging
         });
 
         // Handle different types of error responses
@@ -357,7 +398,14 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
     setSelectedSlotId(null);
   };
 
-  const isSubmitDisabled = submitting || !formData.package || !formData.date || !formData.start_time || !formData.location.trim() || !selectedPhotographerId || !selectedSlotId;
+  // Enhanced validation for submit button
+  const isSubmitDisabled = submitting || 
+    !formData.package || 
+    !formData.date || 
+    !formData.start_time || 
+    !formData.location.trim() || 
+    !selectedPhotographerId || 
+    !selectedSlotId;
 
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
@@ -448,6 +496,15 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
                   <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
+              
+              {/* Debug info in development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+                  <div>Selected Photographer ID: {selectedPhotographerId || 'None'}</div>
+                  <div>Selected Slot ID: {selectedSlotId || 'None'}</div>
+                  <div>Available Slots: {timeSlots.length}</div>
+                </div>
+              )}
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>

@@ -33,13 +33,13 @@ const SharedView = () => {
       setLoading(true);
       // Try gallery first
       try {
-        const res = await axios.get(`http://127.0.0.1:8000/share/gallery/${token}/`);
+        const res = await axios.get(`http://lvh.me:8000/share/gallery/${token}/`);
         setData(res.data);
         setViewType('gallery');
       } catch (galleryErr) {
         // If gallery fails, try photo
         if (galleryErr.response?.status === 404) {
-          const res = await axios.get(`http://127.0.0.1:8000/share/photo/${token}/`);
+          const res = await axios.get(`http://lvh.me:8000/share/photo/${token}/`);
           setData(res.data);
           setViewType('photo');
         } else {

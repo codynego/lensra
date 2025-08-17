@@ -117,6 +117,11 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
 
 # ---- CREATE ----
+from rest_framework.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404
+from .models import Gallery
+from subscription.models import UserSubscription
+
 class GalleryCreateView(generics.CreateAPIView):
     serializer_class = GalleryCreateSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -126,12 +131,27 @@ class GalleryCreateView(generics.CreateAPIView):
         parent_gallery_id = self.request.data.get("parent_gallery")
         parent_gallery = None
 
+        # Check if user wants to create a sub-gallery
         if parent_gallery_id:
             parent_gallery = get_object_or_404(Gallery, id=parent_gallery_id)
-            if parent_gallery.user != self.request.user:
+            if parent_gallery.user != user:
                 raise PermissionDenied("You cannot add a sub-gallery to another user's gallery.")
 
+        # Fetch the user's subscription plan
+        try:
+            subscription = UserSubscription.objects.get(user=user)
+            max_galleries = subscription.plan.features.get("max_galleries_count", 0)
+        except UserSubscription.DoesNotExist:
+            max_galleries = 0
+
+        # Check current gallery count
+        current_galleries_count = Gallery.objects.filter(user=user, parent_gallery__isnull=True).count()
+        if current_galleries_count >= max_galleries:
+            raise PermissionDenied(f"You have reached your gallery limit of {max_galleries}.")
+
+        # Save gallery
         serializer.save(user=user, parent_gallery=parent_gallery)
+
 
 
 # ---- SHARING VIEWS (Updated) ----

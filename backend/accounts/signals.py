@@ -6,7 +6,7 @@ import os
 from django.db.models.signals import post_delete
 from django.conf import settings
 from .models import User
-from subscription.models import UserSubscription, SubscriptionPlan
+from subscription.models import UserSubscription, SubscriptionPlan, Stats
 from studio.models import Studio
 
 @receiver(post_save, sender=User)
@@ -27,21 +27,28 @@ def delete_profile_picture_on_user_delete(sender, instance, **kwargs):
             os.remove(instance.profile_picture.path)
 
 
-@receiver(post_save, sender=User)
-def create_user_subscription(sender, instance, created, **kwargs):
-    if created:
-        try:
-            default_plan = SubscriptionPlan.objects.get(name="Starter")
-        except SubscriptionPlan.DoesNotExist:
-            default_plan = None
-
-        UserSubscription.objects.create(
-            user=instance,
-            plan=default_plan
-        )
-
 
 @receiver(post_save, sender=Photographer)
 def create_photographer_studio(sender, instance, created, **kwargs):
     if created:
         Studio.objects.create(photographer=instance)
+
+@receiver(post_save, sender=User)
+def create_user_subscription(sender, instance, created, **kwargs):
+    """
+    Automatically create a UserSubscription when a new User is created.
+    """
+    if created:
+        plan = SubscriptionPlan.objects.first()
+        UserSubscription.objects.create(user=instance, plan=plan)
+
+
+@receiver(post_save, sender=UserSubscription)
+def update_user_stats_on_subscription_change(sender, instance, **kwargs):
+    """
+    Update user stats when a UserSubscription is created or updated.
+    """
+    if instance.user:
+        stats, _ = Stats.objects.get_or_create(user=instance.user)
+        stats.subscription_plan = instance.plan
+        stats.save()
