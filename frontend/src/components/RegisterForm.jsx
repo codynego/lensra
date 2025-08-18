@@ -16,6 +16,8 @@ export default function RegisterForm() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
+  const BRAND_COLOR = '#6366f1';
+
   const handleChange = (e) => {
     setFormData((prev) => ({
       ...prev,
@@ -63,11 +65,15 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-lg">
-        <h2 className="text-4xl font-bold mb-6 text-center text-[#dd183b]">Register</h2>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 p-4">
+      <div className="w-full max-w-md p-6 bg-gray-800/50 rounded-2xl shadow-lg border border-gray-700/50 backdrop-blur-sm">
+        <h2 className="text-4xl font-bold mb-6 text-center bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          Register
+        </h2>
         {message && (
-          <div className="mb-4 text-red-600 text-center font-semibold">{message}</div>
+          <div className="mb-4 p-3 text-red-200 text-center font-semibold bg-red-900/50 border border-red-500/50 rounded-lg">
+            {message}
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -80,9 +86,9 @@ export default function RegisterForm() {
                 checked={formData.role === "client"}
                 onChange={handleRoleChange}
                 disabled={loading}
-                className="form-radio h-5 w-5 text-[#dd183b] border-2 border-gray-300 focus:ring-2 focus:ring-[#dd183b]"
+                className="form-radio h-5 w-5 text-indigo-500 border-2 border-gray-600 focus:ring-2 focus:ring-indigo-500"
               />
-              <span className="text-gray-700 font-medium">Client</span>
+              <span className="text-gray-300 font-medium">Client</span>
             </label>
             <label className="flex items-center space-x-3 cursor-pointer">
               <input
@@ -92,23 +98,26 @@ export default function RegisterForm() {
                 checked={formData.role === "photographer"}
                 onChange={handleRoleChange}
                 disabled={loading}
-                className="form-radio h-5 w-5 text-[#dd183b] border-2 border-gray-300 focus:ring-2 focus:ring-[#dd183b]"
+                className="form-radio h-5 w-5 text-indigo-500 border-2 border-gray-600 focus:ring-2 focus:ring-indigo-500"
               />
-              <span className="text-gray-700 font-medium">Photographer</span>
+              <span className="text-gray-300 font-medium">Photographer</span>
             </label>
           </div>
+          {errors.role && (
+            <p className="text-red-200 text-sm text-center">{errors.role}</p>
+          )}
 
           <input
             name="username"
             placeholder="Username"
             value={formData.username}
             onChange={handleChange}
-            className="w-full px-3 py-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#dd183b]"
+            className="w-full px-3 py-2 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
             required
             disabled={loading}
           />
           {errors.username && (
-            <p className="text-red-600 text-sm">{errors.username}</p>
+            <p className="text-red-200 text-sm">{errors.username}</p>
           )}
 
           <input
@@ -117,11 +126,11 @@ export default function RegisterForm() {
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
-            className="w-full px-3 py-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#dd183b]"
+            className="w-full px-3 py-2 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
             required
             disabled={loading}
           />
-          {errors.email && <p className="text-red-600 text-sm">{errors.email}</p>}
+          {errors.email && <p className="text-red-200 text-sm">{errors.email}</p>}
 
           <input
             name="password"
@@ -129,12 +138,12 @@ export default function RegisterForm() {
             placeholder="Password"
             value={formData.password}
             onChange={handleChange}
-            className="w-full px-3 py-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#dd183b]"
+            className="w-full px-3 py-2 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
             required
             disabled={loading}
           />
           {errors.password && (
-            <p className="text-red-600 text-sm">{errors.password}</p>
+            <p className="text-red-200 text-sm">{errors.password}</p>
           )}
 
           <input
@@ -143,23 +152,23 @@ export default function RegisterForm() {
             placeholder="Confirm Password"
             value={formData.password2}
             onChange={handleChange}
-            className="w-full px-3 py-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#dd183b]"
+            className="w-full px-3 py-2 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
             required
             disabled={loading}
           />
           {errors.password2 && (
-            <p className="text-red-600 text-sm">{errors.password2}</p>
+            <p className="text-red-200 text-sm">{errors.password2}</p>
           )}
 
           <div className="flex justify-center">
             <button
               type="submit"
               disabled={loading}
-              className={`w-full max-w-xs py-2 rounded text-white ${
+              className={`w-full max-w-xs py-2 rounded-lg text-white font-medium transition-all duration-200 shadow-lg ${
                 loading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#dd183b] hover:bg-red-700"
-              } transition flex justify-center items-center`}
+                  ? "bg-gray-600/50 cursor-not-allowed"
+                  : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover:shadow-indigo-500/40"
+              } flex justify-center items-center`}
             >
               {loading && (
                 <svg
@@ -188,11 +197,11 @@ export default function RegisterForm() {
           </div>
         </form>
 
-        <div className="flex justify-between items-center mt-6 text-sm text-gray-600">
-          <Link to="/login" className="text-[#dd183b] hover:underline">
+        <div className="flex justify-between items-center mt-6 text-sm text-gray-300">
+          <Link to="/login" className="text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
             Already have an account? Login
           </Link>
-          <Link to="/forgot-password" className="text-[#dd183b] hover:underline">
+          <Link to="/forgot-password" className="text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
             Forgot Password?
           </Link>
         </div>

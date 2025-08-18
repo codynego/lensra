@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Menu, X, BarChart3, Users, Camera, Image, Sparkles, Settings, Info, RotateCcw } from 'lucide-react';
 import { useApi } from '../useApi';
 
-const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }) => {
+const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
   const { apiFetch } = useApi();
-  const [showStatsPopup, setShowStatsPopup] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
   const [userStats, setUserStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const fetchingRef = useRef(false);
   const CACHE_KEY = 'lensra_user_stats';
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  const BRAND_COLOR = '#6366f1';
 
   // Load cached stats from localStorage
   const loadCachedStats = () => {
@@ -18,8 +20,6 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
         const now = Date.now();
-        
-        // Check if cache is still valid
         if (now - timestamp < CACHE_DURATION) {
           return data;
         }
@@ -48,7 +48,6 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       if (!cached) return true;
-      
       const { timestamp } = JSON.parse(cached);
       const now = Date.now();
       return (now - timestamp) >= CACHE_DURATION;
@@ -60,15 +59,12 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
   // Fetch fresh stats from server
   const fetchFreshStats = async () => {
     if (fetchingRef.current) return null;
-
     try {
       fetchingRef.current = true;
-      
       const response = await apiFetch('/subscriptions/me/stats/');
       if (!response.ok) {
         throw new Error('Failed to fetch user stats');
       }
-      
       const data = await response.json();
       saveStatsToCache(data);
       return data;
@@ -80,16 +76,6 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
     }
   };
 
-  // Common menu items for main navigation to switch tabs
-  const mainMenu = [
-    { label: 'Bookings' },
-    { label: 'Clients' },
-    { label: 'Studio' },
-    { label: 'Gallery' },
-    { label: 'AI Tools' },
-    { label: 'Settings' },
-  ];
-
   // Initialize stats from cache and fetch if needed
   useEffect(() => {
     let isMounted = true;
@@ -97,13 +83,10 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
     const initializeStats = async () => {
       if (!isMounted) return;
 
-      // First, try to load from cache
       const cachedStats = loadCachedStats();
       if (cachedStats) {
         setUserStats(cachedStats);
         setLoading(false);
-        
-        // If cache is getting old, fetch fresh data in background
         if (shouldRefreshCache()) {
           try {
             const freshStats = await fetchFreshStats();
@@ -111,16 +94,13 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
               setUserStats(freshStats);
             }
           } catch (error) {
-            // Don't update error state since we have cached data
             console.error('Background refresh failed:', error);
           }
         }
       } else {
-        // No cache available, fetch fresh data
         try {
           setLoading(true);
           setError(null);
-          
           const freshStats = await fetchFreshStats();
           if (isMounted && freshStats) {
             setUserStats(freshStats);
@@ -138,7 +118,6 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
     };
 
     initializeStats();
-
     return () => {
       isMounted = false;
     };
@@ -157,47 +136,46 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu, BRAND_COLOR }
     }
   };
 
-  // Calculate storage usage percentage
-// Calculate storage usage percentage
-const getStoragePercentage = () => {
-  if (!userStats?.storage_used || !userStats?.plan_limits?.storage_gb) return 0;
+  const mainMenu = [
+    { label: 'Bookings', icon: BarChart3 },
+    { label: 'Clients', icon: Users },
+    { label: 'Studio', icon: Camera },
+    { label: 'Gallery', icon: Image },
+    { label: 'AI Tools', icon: Sparkles },
+    { label: 'Settings', icon: Settings },
+  ];
 
-  const usedGB = parseFloat(userStats.storage_used) / (1024 ** 3); // bytes → GB
-  const limitGB = parseFloat(userStats.plan_limits.storage_gb); // already in GB
+  const formatStorageSize = (bytes) => {
+    if (bytes === undefined || bytes === null) return '0 B';
+    if (bytes === 'unlimited') return 'Unlimited';
 
-  if (limitGB === 0) return 0; // avoid division by zero
+    const num = parseFloat(bytes);
+    if (isNaN(num)) return '0 B';
 
-  return Math.min((usedGB / limitGB) * 100, 100);
-};
+    if (num >= 1024 ** 4) {
+      return `${(num / (1024 ** 4)).toFixed(1)} TB`;
+    } else if (num >= 1024 ** 3) {
+      return `${(num / (1024 ** 3)).toFixed(1)} GB`;
+    } else if (num >= 1024 ** 2) {
+      return `${(num / (1024 ** 2)).toFixed(1)} MB`;
+    } else if (num >= 1024) {
+      return `${(num / 1024).toFixed(1)} KB`;
+    }
+    return `${num} B`;
+  };
 
+  const getStoragePercentage = () => {
+    if (!userStats?.storage_used || !userStats?.plan_limits?.storage_gb) return 0;
+    const usedGB = parseFloat(userStats.storage_used);
+    const limitGB = parseFloat(userStats.plan_limits.storage_gb);
+    if (limitGB === 0) return 0;
+    return Math.min((usedGB / limitGB) * 100, 100);
+  };
 
-// Format storage size (input is in MB)
-// Format storage size (input is in BYTES)
-const formatStorageSize = (bytes) => {
-  if (bytes === undefined || bytes === null) return '0 B';
-  if (bytes === 'unlimited') return 'Unlimited';
-
-  const num = parseFloat(bytes);
-  if (isNaN(num)) return '0 B';
-
-  if (num >= 1024 ** 4) {
-    return `${(num / (1024 ** 4)).toFixed(1)} TB`;
-  } else if (num >= 1024 ** 3) {
-    return `${(num / (1024 ** 3)).toFixed(1)} GB`;
-  } else if (num >= 1024 ** 2) {
-    return `${(num / (1024 ** 2)).toFixed(1)} MB`;
-  } else if (num >= 1024) {
-    return `${(num / 1024).toFixed(1)} KB`;
-  }
-  return `${num} B`;
-};
-
-  // Get plan name from limits
   const getPlanName = () => {
     return userStats?.plan_name || 'Free';
   };
 
-  // Get plan badge color
   const getPlanColor = (planName) => {
     if (!planName) return '#6B7280';
     const plan = planName.toLowerCase();
@@ -207,125 +185,171 @@ const formatStorageSize = (bytes) => {
     return '#6B7280';
   };
 
-  // Get usage color based on percentage
   const getUsageColor = (percentage) => {
-    if (percentage >= 90) return '#EF4444'; // Red
-    if (percentage >= 75) return '#F59E0B'; // Amber
-    return BRAND_COLOR; // Brand color
+    if (percentage >= 90) return '#EF4444';
+    if (percentage >= 75) return '#F59E0B';
+    return BRAND_COLOR;
   };
 
-  // Get usage percentage for any stat
   const getUsagePercentage = (current, max) => {
-    if (!max || max === -1) return 0; // -1 typically means unlimited
+    if (!max || max === -1) return 0;
     return Math.min((current / max) * 100, 100);
   };
 
-  // Check if limit is unlimited
   const isUnlimited = (limit) => {
     return !limit || limit === -1 || limit === 0;
   };
 
   return (
     <>
-      <aside className="hidden lg:flex flex-col w-64 bg-gray-800 p-6 shadow-lg fixed h-screen">
-        <div className="mb-10">
-          <h2 className="text-3xl font-extrabold cursor-default" style={{ color: BRAND_COLOR }}>
-            Lensra
-          </h2>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => closeMenu()}
+        className="lg:hidden fixed top-4 left-4 z-50 bg-gray-900 text-white p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-800 transition-all duration-200"
+      >
+        {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {/* Mobile Overlay */}
+      {isMenuOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          onClick={() => closeMenu()}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-40 w-80 lg:w-64 
+        bg-gradient-to-b from-gray-900 via-gray-900 to-gray-800 
+        shadow-2xl border-r border-gray-700/50
+        transform transition-transform duration-300 ease-in-out
+        ${isMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        flex flex-col h-screen overflow-hidden
+      `}>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-700/50">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+              Lensra
+            </h1>
+            <button
+              onClick={() => closeMenu()}
+              className="lg:hidden text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        {/* Main navigation buttons */}
-        <nav className="flex flex-col space-y-2 mb-6">
-          {mainMenu.map(({ label }) => (
-            <button
-              key={label}
-              onClick={() => {
-                setActiveTab(label);
-                if (isMenuOpen) closeMenu();
-              }}
-              className={`text-left py-3 px-4 rounded-lg font-semibold transition-colors duration-200 w-full ${
-                activeTab === label ? 'text-white' : 'hover:bg-gray-700 text-gray-300'
-              }`}
-              style={activeTab === label ? { backgroundColor: BRAND_COLOR } : {}}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Navigation */}
+        <nav className="flex-1 p-4 overflow-y-auto">
+          <div className="space-y-2">
+            {mainMenu.map(({ label, icon: Icon }) => (
+              <button
+                key={label}
+                onClick={() => {
+                  setActiveTab(label);
+                  closeMenu();
+                }}
+                className={`
+                  w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium
+                  transition-all duration-200 group relative overflow-hidden
+                  ${activeTab === label 
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25' 
+                    : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
+                  }
+                `}
+              >
+                <Icon size={18} className={`${activeTab === label ? 'text-white' : 'text-gray-400 group-hover:text-indigo-400'} transition-colors`} />
+                <span className="font-medium">{label}</span>
+                {activeTab === label && (
+                  <div className="absolute right-2 w-2 h-2 bg-white rounded-full opacity-80" />
+                )}
+              </button>
+            ))}
+          </div>
         </nav>
 
-        {/* Render sub-sidebar based on active tab */}
-        {/* <div className="flex-1 overflow-y-auto">
-          {activeTab === 'Bookings' && <BookingSidebar />}
-          {activeTab === 'Gallery' && <GallerySidebar />}
-          {activeTab === 'Studio' && <StudioSidebar />}
-          {activeTab === 'AI Tools' && <AiToolSideBar />}
-          {activeTab === 'Settings' && <SettingsSidebar />}
-        </div> */}
-
-        {/* Modern Storage Usage and Plan Info */}
-        <div className="mt-auto">
+        {/* Stats Card */}
+        <div className="p-4 border-t border-gray-700/50">
           {loading ? (
-            <div className="bg-gray-700 rounded-xl p-4">
-              <div className="animate-pulse">
-                <div className="h-4 bg-gray-600 rounded mb-2"></div>
-                <div className="h-2 bg-gray-600 rounded mb-2"></div>
-                <div className="h-3 bg-gray-600 rounded w-3/4"></div>
+            <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl p-4 border border-gray-600/50">
+              <div className="animate-pulse space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="h-3 bg-gray-600 rounded-full w-16"></div>
+                  <div className="h-3 bg-gray-600 rounded-full w-12"></div>
+                </div>
+                <div className="h-2 bg-gray-600 rounded-full"></div>
+                <div className="h-3 bg-gray-600 rounded-full w-20"></div>
               </div>
             </div>
           ) : error ? (
-            <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 text-center text-red-400 text-sm">
-              Failed to load stats
+            <div className="bg-red-900/20 border border-red-500/30 rounded-2xl p-4 text-center">
+              <p className="text-red-400 text-sm">{error}</p>
+              <button 
+                onClick={refreshStats}
+                className="mt-2 text-xs text-red-300 hover:text-red-200 underline"
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <div
-              className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl p-4 cursor-pointer hover:from-gray-600 hover:to-gray-700 transition-all duration-300 border border-gray-600/50 shadow-lg"
-              onClick={() => setShowStatsPopup(true)}
+              onClick={() => setShowStatsModal(true)}
+              className="bg-gradient-to-br from-gray-700 via-gray-750 to-gray-800 
+                         rounded-2xl p-4 cursor-pointer transition-all duration-300 
+                         hover:from-gray-600 hover:via-gray-700 hover:to-gray-750
+                         border border-gray-600/50 shadow-lg group"
             >
-              {/* Plan Badge and Usage */}
+              {/* Plan Info */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: getPlanColor(getPlanName()) }}
-                  ></div>
-                  <span className="text-xs font-medium text-gray-300 uppercase tracking-wide">
+                    className="w-2.5 h-2.5 rounded-full shadow-lg"
+                    style={{ 
+                      backgroundColor: getPlanColor(getPlanName()),
+                      boxShadow: `0 0 8px ${getPlanColor(getPlanName())}40`
+                    }}
+                  />
+                  <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
                     {getPlanName()}
                   </span>
                 </div>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-400 font-medium">
                   {formatStorageSize(userStats?.storage_used)}
                 </span>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-gray-600/50 rounded-full h-1.5 mb-3 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out shadow-sm"
-                  style={{
-                    width: `${getStoragePercentage()}%`,
-                    backgroundColor: getUsageColor(getStoragePercentage()),
-                    boxShadow: `0 0 8px ${getUsageColor(getStoragePercentage())}20`,
-                  }}
-                ></div>
+              <div className="relative mb-3">
+                <div className="w-full bg-gray-600/40 rounded-full h-2 overflow-hidden backdrop-blur-sm">
+                  <div
+                    className="h-full rounded-full transition-all duration-700 ease-out relative"
+                    style={{
+                      width: `${getStoragePercentage()}%`,
+                      background: `linear-gradient(90deg, ${getUsageColor(getStoragePercentage())}, ${getUsageColor(getStoragePercentage())}cc)`,
+                      boxShadow: `0 0 12px ${getUsageColor(getStoragePercentage())}40`,
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                  </div>
+                </div>
               </div>
 
-              {/* Storage Info */}
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-400">Storage</span>
-                <span className="text-gray-300 font-medium">
-                  {isUnlimited(userStats?.plan_limits?.storage_gb) 
-                    ? '∞' 
-                    : formatStorageSize(userStats?.plan_limits?.storage_gb)
-                  }
+              {/* Storage Details */}
+              <div className="flex justify-between items-center text-xs mb-3">
+                <span className="text-gray-400">Storage Usage</span>
+                <span className="text-gray-200 font-semibold">
+                  {getStoragePercentage().toFixed(1)}%
                 </span>
               </div>
 
-              <div className="text-center mt-3">
-                <div className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-300 transition-colors">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  View details
+              {/* View Details */}
+              <div className="text-center">
+                <div className="inline-flex items-center gap-1.5 text-xs text-gray-400 group-hover:text-indigo-400 transition-colors">
+                  <Info size={12} />
+                  <span>View account details</span>
                 </div>
               </div>
             </div>
@@ -333,225 +357,156 @@ const formatStorageSize = (bytes) => {
         </div>
       </aside>
 
-      {/* Modern Stats Popup */}
-      {showStatsPopup && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-gray-600/50">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white">Account Overview</h3>
+      {/* Stats Modal */}
+      {showStatsModal && userStats && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-800 via-gray-850 to-gray-900 
+                         rounded-3xl w-full max-w-lg shadow-2xl border border-gray-600/50 
+                         transform transition-all duration-300 scale-100">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-700/50">
+              <h2 className="text-2xl font-bold text-white">Account Overview</h2>
               <div className="flex items-center gap-2">
                 <button
                   onClick={refreshStats}
-                  className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-gray-700 rounded-lg"
+                  disabled={loading}
+                  className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-700 rounded-xl disabled:opacity-50"
                   title="Refresh stats"
                 >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
+                  <RotateCcw size={18} className={loading ? 'animate-spin' : ''} />
                 </button>
                 <button
-                  onClick={() => setShowStatsPopup(false)}
-                  className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-gray-700 rounded-lg"
+                  onClick={() => setShowStatsModal(false)}
+                  className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-700 rounded-xl"
                 >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
-            {/* Plan Info Card */}
-            <div className="bg-gradient-to-r from-gray-700 to-gray-600 rounded-xl p-4 mb-6 border border-gray-500/30">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-300 text-sm">Current Plan</span>
-                <span
-                  className="text-sm font-bold px-3 py-1 rounded-full text-white shadow-lg"
-                  style={{ backgroundColor: getPlanColor(getPlanName()) }}
-                >
-                  {getPlanName()}
-                </span>
-              </div>
-              
-              {/* Storage Usage Bar */}
-              <div className="mt-3">
-                <div className="flex justify-between text-sm text-gray-300 mb-2">
-                  <span>Storage Usage</span>
-                  <span className="font-medium">
-                    {isUnlimited(userStats?.plan_limits?.storage_gb) 
-                      ? `${formatStorageSize(userStats?.storage_used)} used`
-                      : `${getStoragePercentage().toFixed(1)}%`
-                    }
+            <div className="p-6 space-y-6">
+              {/* Plan Card */}
+              <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl p-5 border border-indigo-500/30">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-gray-300 text-sm font-medium">Current Plan</span>
+                  <span
+                    className="text-sm font-bold px-4 py-2 rounded-full text-white shadow-lg"
+                    style={{ backgroundColor: getPlanColor(getPlanName()) }}
+                  >
+                    {getPlanName()}
                   </span>
                 </div>
-                <div className="w-full bg-gray-600/50 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="h-2 rounded-full transition-all duration-500 shadow-lg"
-                    style={{
-                      width: `${getStoragePercentage()}%`,
-                      backgroundColor: getUsageColor(getStoragePercentage()),
-                      boxShadow: `0 0 10px ${getUsageColor(getStoragePercentage())}30`,
-                    }}
-                  ></div>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>{formatStorageSize(userStats?.storage_used)}</span>
-                  <span>
-                    {isUnlimited(userStats?.plan_limits?.storage_gb) 
-                      ? '∞' 
-                      : formatStorageSize(userStats?.plan_limits?.storage_gb)
-                    }
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Usage Stats Grid */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {/* Galleries */}
-              <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/30 relative overflow-hidden">
-                <div className="text-2xl font-bold text-white mb-1">
-                  {userStats?.galleries_count || 0}
-                </div>
-                <div className="text-sm text-gray-400">Galleries</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {isUnlimited(userStats?.plan_limits?.max_galleries_count) 
-                    ? 'Unlimited' 
-                    : `of ${userStats?.plan_limits?.max_galleries_count || 0} max`
-                  }
-                </div>
-                {!isUnlimited(userStats?.plan_limits?.max_galleries_count) && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-gray-600 w-full">
-                    <div
-                      className="h-full bg-blue-500 transition-all duration-300"
-                      style={{
-                        width: `${getUsagePercentage(
-                          userStats?.galleries_count || 0,
-                          userStats?.plan_limits?.max_galleries_count
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Photos */}
-              <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/30 relative overflow-hidden">
-                <div className="text-2xl font-bold text-white mb-1">
-                  {userStats?.photos_count || 0}
-                </div>
-                <div className="text-sm text-gray-400">Photos</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {isUnlimited(userStats?.plan_limits?.max_photos_count) 
-                    ? 'Unlimited' 
-                    : `of ${userStats?.plan_limits?.max_photos_count || 0} max`
-                  }
-                </div>
-                {!isUnlimited(userStats?.plan_limits?.max_photos_count) && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-gray-600 w-full">
-                    <div
-                      className="h-full bg-green-500 transition-all duration-300"
-                      style={{
-                        width: `${getUsagePercentage(
-                          userStats?.photos_count || 0,
-                          userStats?.plan_limits?.max_photos_count
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bookings */}
-              <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/30 relative overflow-hidden">
-                <div className="text-2xl font-bold text-white mb-1">
-                  {userStats?.bookings_count || 0}
-                </div>
-                <div className="text-sm text-gray-400">Bookings</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {isUnlimited(userStats?.plan_limits?.max_bookings_count) 
-                    ? 'Unlimited' 
-                    : `of ${userStats?.plan_limits?.max_bookings_count || 0} max`
-                  }
-                </div>
-                {!isUnlimited(userStats?.plan_limits?.max_bookings_count) && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-gray-600 w-full">
-                    <div
-                      className="h-full bg-purple-500 transition-all duration-300"
-                      style={{
-                        width: `${getUsagePercentage(
-                          userStats?.bookings_count || 0,
-                          userStats?.plan_limits?.max_bookings_count
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Clients */}
-              <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/30 relative overflow-hidden">
-                <div className="text-2xl font-bold text-white mb-1">
-                  {userStats?.clients_count || 0}
-                </div>
-                <div className="text-sm text-gray-400">Clients</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {isUnlimited(userStats?.plan_limits?.max_clients_count) 
-                    ? 'Unlimited' 
-                    : `of ${userStats?.plan_limits?.max_clients_count || 0} max`
-                  }
-                </div>
-                {!isUnlimited(userStats?.plan_limits?.max_clients_count) && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-gray-600 w-full">
-                    <div
-                      className="h-full bg-orange-500 transition-all duration-300"
-                      style={{
-                        width: `${getUsagePercentage(
-                          userStats?.clients_count || 0,
-                          userStats?.plan_limits?.max_clients_count
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* AI Tools Available */}
-            {userStats?.plan_limits?.ai_tools && userStats.plan_limits.ai_tools.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-300 mb-3">AI Tools Available</h4>
-                <div className="flex flex-wrap gap-2">
-                  {userStats.plan_limits.ai_tools.map((tool, index) => (
-                    <span
-                      key={index}
-                      className="text-xs px-3 py-1 rounded-full bg-gray-600 text-gray-300 border border-gray-500"
-                    >
-                      {tool.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                
+                {/* Storage Progress */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-300">
+                    <span className="font-medium">Storage Usage</span>
+                    <span className="font-bold text-white">
+                      {getStoragePercentage().toFixed(1)}%
                     </span>
-                  ))}
+                  </div>
+                  <div className="w-full bg-gray-600/30 rounded-full h-3 overflow-hidden backdrop-blur-sm">
+                    <div
+                      className="h-3 rounded-full transition-all duration-700 relative"
+                      style={{
+                        width: `${getStoragePercentage()}%`,
+                        background: `linear-gradient(90deg, ${getUsageColor(getStoragePercentage())}, ${getUsageColor(getStoragePercentage())}dd)`,
+                        boxShadow: `0 0 15px ${getUsageColor(getStoragePercentage())}50`,
+                      }}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>{formatStorageSize(userStats.storage_used)}</span>
+                    <span>{isUnlimited(userStats?.plan_limits?.storage_gb) 
+                      ? '∞' 
+                      : formatStorageSize(userStats?.plan_limits?.storage_gb)}</span>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowStatsPopup(false);
-                  setActiveTab('Settings');
-                }}
-                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 px-4 rounded-xl transition-all duration-200 font-medium border border-gray-500/50"
-              >
-                Manage Plan
-              </button>
-              <button
-                onClick={() => setShowStatsPopup(false)}
-                className="flex-1 text-white py-3 px-4 rounded-xl transition-all duration-200 font-medium shadow-lg"
-                style={{ backgroundColor: BRAND_COLOR }}
-              >
-                Close
-              </button>
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Galleries', count: userStats.galleries_count, max: userStats.plan_limits.max_galleries_count, color: 'blue' },
+                  { label: 'Photos', count: userStats.photos_count, max: userStats.plan_limits.max_photos_count, color: 'green' },
+                  { label: 'Bookings', count: userStats.bookings_count, max: userStats.plan_limits.max_bookings_count, color: 'purple' },
+                  { label: 'Clients', count: userStats.clients_count, max: userStats.plan_limits.max_clients_count, color: 'orange' }
+                ].map((stat) => {
+                  const colorMap = {
+                    blue: '#3B82F6',
+                    green: '#10B981',
+                    purple: '#8B5CF6',
+                    orange: '#F59E0B'
+                  };
+                  
+                  return (
+                    <div key={stat.label} className="bg-gray-700/30 rounded-2xl p-4 border border-gray-600/30 relative overflow-hidden backdrop-blur-sm">
+                      <div className="text-3xl font-bold text-white mb-1">
+                        {stat.count.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-gray-300 font-medium mb-1">{stat.label}</div>
+                      <div className="text-xs text-gray-400">
+                        {isUnlimited(stat.max) ? 'Unlimited' : `of ${stat.max.toLocaleString()}`}
+                      </div>
+                      
+                      {!isUnlimited(stat.max) && (
+                        <div className="absolute bottom-0 left-0 h-1 bg-gray-600/50 w-full">
+                          <div
+                            className="h-full transition-all duration-500"
+                            style={{
+                              width: `${getUsagePercentage(stat.count, stat.max)}%`,
+                              backgroundColor: colorMap[stat.color],
+                              boxShadow: `0 0 8px ${colorMap[stat.color]}40`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* AI Tools */}
+              {userStats.plan_limits.ai_tools && userStats.plan_limits.ai_tools.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">AI Tools Available</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {userStats.plan_limits.ai_tools.map((tool, index) => (
+                      <span
+                        key={index}
+                        className="text-xs px-3 py-2 rounded-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 
+                                 text-indigo-300 border border-indigo-500/30 font-medium"
+                      >
+                        {tool.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowStatsModal(false);
+                    setActiveTab('Settings');
+                    closeMenu();
+                  }}
+                  className="flex-1 bg-gray-600/50 hover:bg-gray-600 text-white py-3 px-4 rounded-xl 
+                           transition-all duration-200 font-medium border border-gray-500/50 backdrop-blur-sm"
+                >
+                  Manage Plan
+                </button>
+                <button
+                  onClick={() => setShowStatsModal(false)}
+                  className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 
+                           text-white py-3 px-4 rounded-xl transition-all duration-200 font-medium shadow-lg shadow-indigo-500/25"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

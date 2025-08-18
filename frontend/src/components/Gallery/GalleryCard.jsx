@@ -50,8 +50,7 @@ const Dropdown = ({ trigger, children, isOpen, onToggle }) => {
       {isOpen && (
         <div 
           ref={menuRef}
-          className="absolute right-0 top-full mt-2 w-40 bg-slate-900/95 backdrop-blur-xl border border-slate-700/70 text-white rounded-lg shadow-2xl overflow-visible z-[9999] divide-y divide-slate-700/50"
-          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full mt-2 w-48 bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 text-white rounded-lg shadow-xl z-50 divide-y divide-slate-700/30"
         >
           {children}
         </div>
@@ -132,9 +131,7 @@ const GalleryCard = ({
   const [loadingSubGallery, setLoadingSubGallery] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [visibility, setVisibility] = useState(gallery?.visibility || "private");
-  const [isShareableViaLink, setIsShareableViaLink] = useState(
-    gallery?.is_shareable_via_link || false
-  );
+  const [isShareableViaLink, setIsShareableViaLink] = useState(gallery?.is_shareable_via_link || false);
   const [shareUrl, setShareUrl] = useState(gallery?.share_url || "");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectionShareUrl, setSelectionShareUrl] = useState("");
@@ -208,7 +205,7 @@ const GalleryCard = ({
     }
   };
 
-  const handleUpdateSharing = async (newVisibility, newShareableViaLink) => {
+  const handleUpdateSharing = async (newVisibility, newShareableViaLink, newSelectionMode) => {
     setUpdating(true);
     try {
       const response = await apiFetch(`/gallery/galleries/${gallery.id}/share/`, {
@@ -256,6 +253,8 @@ const GalleryCard = ({
       }
       const data = await response.json();
       setIsSelectionMode(enabled);
+      setIsShareableViaLink(false); // Ensure shareable link is disabled
+      setShareUrl(""); // Clear share URL
       setSelectionShareUrl(enabled && data.public_selection_url ? data.public_selection_url : "");
       if (enabled && data.public_selection_url) {
         setShowShareModal(true);
@@ -269,25 +268,30 @@ const GalleryCard = ({
     }
   };
 
-  const handleVisibilityChange = (newVisibility) => {
-    handleUpdateSharing(newVisibility, isShareableViaLink);
-  };
-
   const handleShareLinkToggle = (enabled) => {
-    handleUpdateSharing(visibility, enabled);
+    setIsShareableViaLink(enabled);
+    setIsSelectionMode(false); // Ensure selection mode is disabled
+    setSelectionShareUrl(""); // Clear selection URL
+    handleUpdateSharing(visibility, enabled, false);
+    if (enabled) {
+      setShowShareModal(true);
+    }
   };
 
-  const copyShareUrl = async (slug, selectionShareUrl) => {
-    if (!slug || !selectionShareUrl) return;
+  const handleVisibilityChange = (newVisibility) => {
+    handleUpdateSharing(newVisibility, isShareableViaLink, isSelectionMode);
+  };
 
-    const fullUrl = buildGalleryUrl(slug, selectionShareUrl);
+  const copyShareUrl = async (slug, shareUrl) => {
+    if (!slug || !shareUrl) return;
+
+    const fullUrl = buildGalleryUrl(slug, shareUrl);
 
     try {
       await navigator.clipboard.writeText(fullUrl);
       alert("Link copied to clipboard!");
     } catch (err) {
       console.error("Failed to copy using clipboard API:", err);
-
       const textArea = document.createElement("textarea");
       textArea.value = fullUrl;
       document.body.appendChild(textArea);
@@ -295,7 +299,6 @@ const GalleryCard = ({
       textArea.select();
       document.execCommand("copy");
       document.body.removeChild(textArea);
-
       alert("Link copied to clipboard!");
     }
   };
@@ -364,13 +367,11 @@ const GalleryCard = ({
         e.stopPropagation();
         onClick();
       }}
-      className={`flex items-center w-full px-2.5 py-2 text-xs text-left transition-all duration-200 hover:scale-[0.98] ${
-        dangerous 
-          ? "text-red-400 hover:text-red-300 hover:bg-red-600/20" 
-          : "text-slate-200 hover:text-white hover:bg-slate-700/70"
+      className={`flex items-center w-full px-3 py-2 text-sm text-left transition-colors duration-200 hover:bg-slate-700/50 ${
+        dangerous ? "text-red-400 hover:text-red-300" : "text-slate-200 hover:text-white"
       } ${className}`}
     >
-      <Icon className="w-3.5 h-3.5 mr-2 flex-shrink-0" />
+      <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
       <span className="font-medium">{children}</span>
     </button>
   );
@@ -378,44 +379,37 @@ const GalleryCard = ({
   return (
     <>
       <div
-        className="relative group bg-gradient-to-b from-slate-800 to-slate-900 backdrop-blur-sm rounded-2xl overflow-visible shadow-lg border border-slate-700/50 cursor-pointer transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl hover:shadow-slate-900/50 w-full"
+        className="relative group bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden shadow-md border border-slate-700/40 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] w-full max-w-sm mx-auto"
         onClick={handleCardClick}
-        style={{ height: "280px" }}
       >
         {/* Image Container */}
-        <div className="w-full h-48 bg-gradient-to-br from-slate-700 to-slate-800 overflow-hidden relative">
+        <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-slate-700 to-slate-800 overflow-hidden">
           {gallery?.cover_photo ? (
             <img
               src={gallery.cover_photo}
               alt={gallery?.title || "Gallery"}
-              className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900">
-              <FolderIcon className="h-16 w-16 text-slate-400 opacity-60" />
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800">
+              <FolderIcon className="h-12 w-12 text-slate-400 opacity-50" />
             </div>
           )}
-          
-          {/* Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           
           {/* Status Badge */}
-          <div className="absolute top-3 left-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 backdrop-blur-md rounded-full border border-white/20">
+          <div className="absolute top-2 left-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/40 backdrop-blur-sm rounded-full border border-white/10 text-xs text-white font-medium">
               {getStatusIcon()}
-              <span className="text-xs text-white font-medium">
-                {visibility === "public" ? "Public" : 
-                 isShareableViaLink ? "Shared" : 
-                 isSelectionMode ? "Selection" : "Private"}
-              </span>
+              <span>{visibility === "public" ? "Public" : isShareableViaLink ? "Shared" : isSelectionMode ? "Selection" : "Private"}</span>
             </div>
           </div>
 
           {/* Sub-gallery Badge */}
           {gallery?.parent_gallery && (
-            <div className="absolute bottom-3 left-3">
-              <div className="px-2 py-1 bg-blue-500/90 backdrop-blur-sm rounded-lg text-xs font-semibold text-white border border-blue-400/50">
+            <div className="absolute bottom-2 left-2">
+              <div className="px-2 py-0.5 bg-blue-500/80 rounded-md text-xs font-medium text-white border border-blue-400/30">
                 Sub-Gallery
               </div>
             </div>
@@ -423,7 +417,7 @@ const GalleryCard = ({
         </div>
 
         {/* Content Area */}
-        <div className="h-32 p-4 bg-gradient-to-b from-slate-800 to-slate-900 text-white flex flex-col justify-between">
+        <div className="p-4 bg-slate-800/90 text-white">
           {isRenaming ? (
             <input
               data-rename
@@ -433,65 +427,51 @@ const GalleryCard = ({
               onBlur={handleRenameSubmit}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="w-full px-3 py-2 bg-slate-700 text-white rounded-xl border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-400"
+              className="w-full px-2 py-1 bg-slate-700/50 text-white rounded-md border border-slate-600/50 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
               onClick={(e) => e.stopPropagation()}
               placeholder="Enter gallery name..."
             />
           ) : (
-            <div className="flex-1">
-              <h3 className="font-bold text-white text-lg leading-tight mb-1 truncate">
-                {gallery?.title || "Untitled"}
-              </h3>
+            <div>
+              <h3 className="font-semibold text-base truncate">{gallery?.title || "Untitled"}</h3>
               {gallery?.photo_count !== undefined && (
-                <p className="text-sm text-slate-400 font-medium">
-                  {gallery.photo_count} {gallery.photo_count === 1 ? "photo" : "photos"}
-                </p>
+                <p className="text-xs text-slate-400">{gallery.photo_count} {gallery.photo_count === 1 ? "photo" : "photos"}</p>
               )}
             </div>
           )}
         </div>
 
         {/* Menu Button */}
-        <div
-          data-menu
-          className="absolute top-3 right-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 z-50"
-        >
+        <div data-menu className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
           <Dropdown
             isOpen={isMenuOpen}
             onToggle={setIsMenuOpen}
             trigger={
-              <button
-                className="p-2.5 bg-black/30 backdrop-blur-md rounded-full hover:bg-black/50 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all duration-200 border border-white/20"
-              >
-                <DotsVerticalIcon className="h-5 w-5 text-white" />
+              <button className="p-1.5 bg-black/40 backdrop-blur-sm rounded-full hover:bg-black/60 border border-white/10">
+                <DotsVerticalIcon className="h-4 w-4 text-white" />
               </button>
             }
           >
-            <div className="p-0.5">
-              <MenuItem onClick={handleDownloadGallery} icon={DownloadIcon}>
-                Download
-              </MenuItem>
+            <div className="p-1">
+              <MenuItem onClick={handleDownloadGallery} icon={DownloadIcon}>Download</MenuItem>
             </div>
-
             {canManageSharing && (
               <>
-                <div className="p-0.5">
+                <div className="p-1">
                   <MenuItem onClick={() => { setIsMenuOpen(false); setIsRenaming(true); }} icon={() => (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   )}>
                     Rename
                   </MenuItem>
-
                   <MenuItem onClick={() => { setIsMenuOpen(false); setShowShareModal(true); }} icon={ShareIcon}>
-                    Share Option
+                    Share Options
                   </MenuItem>
                 </div>
-
-                <div className="p-0.5">
+                <div className="p-1">
                   <MenuItem onClick={handleDelete} icon={() => (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   )} dangerous>
@@ -506,31 +486,29 @@ const GalleryCard = ({
 
       {/* Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
-          <div className="bg-gradient-to-b from-slate-800 to-slate-900 backdrop-blur-xl rounded-3xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto border border-slate-600/30 shadow-2xl shadow-black/50">
-            <div className="flex justify-between items-center mb-8">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg w-full max-w-md p-6 border border-slate-700/30 shadow-lg">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-2xl font-bold text-white mb-1">Share Settings</h3>
-                <p className="text-slate-400 text-sm">Configure how others can access your gallery</p>
+                <h3 className="text-lg font-semibold text-white">Share Settings</h3>
+                <p className="text-xs text-slate-400">Configure gallery access</p>
               </div>
               <button
                 onClick={() => setShowShareModal(false)}
-                className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-700/50 rounded-xl"
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-md"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Visibility Settings */}
               <div>
-                <label className="block text-lg font-semibold text-white mb-5">
-                  Gallery Visibility
-                </label>
-                <div className="space-y-4">
-                  <label className="flex items-start cursor-pointer p-4 rounded-2xl border border-slate-600/40 hover:border-slate-500/60 hover:bg-slate-700/20 transition-all duration-300 group">
+                <label className="block text-sm font-medium text-white mb-3">Visibility</label>
+                <div className="space-y-3">
+                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="visibility"
@@ -538,20 +516,17 @@ const GalleryCard = ({
                       checked={visibility === "private"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-5 h-5 mt-0.5 mr-4 text-blue-600 focus:ring-blue-500 focus:ring-2 rounded-full"
+                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
                     />
-                    <div className="flex items-start flex-1">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-700/50 mr-4 group-hover:bg-slate-600/50 transition-colors">
-                        <LockClosedIcon className="h-5 w-5 text-slate-300" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-white font-semibold text-base block mb-1">Private</span>
-                        <p className="text-slate-400 text-sm leading-relaxed">Only you can access this gallery. Perfect for personal collections.</p>
+                    <div className="flex items-center flex-1">
+                      <LockClosedIcon className="h-4 w-4 text-slate-300 mr-2" />
+                      <div>
+                        <span className="text-sm text-white font-medium">Private</span>
+                        <p className="text-xs text-slate-400">Only you can access this gallery.</p>
                       </div>
                     </div>
                   </label>
-                  
-                  <label className="flex items-start cursor-pointer p-4 rounded-2xl border border-slate-600/40 hover:border-slate-500/60 hover:bg-slate-700/20 transition-all duration-300 group">
+                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="visibility"
@@ -559,15 +534,13 @@ const GalleryCard = ({
                       checked={visibility === "public"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-5 h-5 mt-0.5 mr-4 text-blue-600 focus:ring-blue-500 focus:ring-2 rounded-full"
+                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
                     />
-                    <div className="flex items-start flex-1">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/20 mr-4 group-hover:bg-emerald-500/30 transition-colors">
-                        <GlobeIcon className="h-5 w-5 text-emerald-400" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-white font-semibold text-base block mb-1">Public Gallery</span>
-                        <p className="text-slate-400 text-sm leading-relaxed">Anyone can discover and view this gallery. Great for showcasing your work.</p>
+                    <div className="flex items-center flex-1">
+                      <GlobeIcon className="h-4 w-4 text-emerald-400 mr-2" />
+                      <div>
+                        <span className="text-sm text-white font-medium">Public</span>
+                        <p className="text-xs text-slate-400">Anyone can view this gallery.</p>
                       </div>
                     </div>
                   </label>
@@ -575,152 +548,98 @@ const GalleryCard = ({
               </div>
 
               {/* Sharing Options */}
-              <div className="border-t border-slate-700/50 pt-8">
-                <label className="block text-lg font-semibold text-white mb-5">
-                  Advanced Sharing
-                </label>
-                
-                <div className="space-y-4">
-                  {/* Enable Shareable Link Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-600/40 hover:border-slate-500/60 hover:bg-slate-700/20 transition-all duration-300">
-                    <label className="flex items-center cursor-pointer">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={isShareableViaLink}
-                          onChange={(e) => handleShareLinkToggle(e.target.checked)}
-                          disabled={updating}
-                          className="sr-only"
-                        />
-                        <div className={`w-11 h-6 rounded-full transition-all duration-300 ${isShareableViaLink ? 'bg-blue-600' : 'bg-slate-600'}`}>
-                          <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-transform duration-300 mt-0.5 ${isShareableViaLink ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`}></div>
-                        </div>
+              <div className="border-t border-slate-700/40 pt-4">
+                <label className="block text-sm font-medium text-white mb-3">Sharing Options</label>
+                <div className="space-y-3">
+                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isShareableViaLink}
+                      onChange={(e) => handleShareLinkToggle(e.target.checked)}
+                      disabled={updating || isSelectionMode}
+                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex items-center flex-1">
+                      <ShareIcon className="h-4 w-4 text-blue-400 mr-2" />
+                      <div>
+                        <span className="text-sm text-white font-medium">Shareable Link</span>
+                        <p className="text-xs text-slate-400">Create a unique URL to share.</p>
                       </div>
-                      <div className="flex items-center ml-4 flex-1">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/20 mr-4">
-                          <ShareIcon className="h-5 w-5 text-blue-400" />
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-white font-semibold text-base block mb-1">Enable Shareable Link</span>
-                          <p className="text-slate-400 text-sm leading-relaxed">Create a unique URL that you can share with others</p>
-                        </div>
+                    </div>
+                  </label>
+                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelectionMode}
+                      onChange={handleToggleSelectionMode}
+                      disabled={updating || isShareableViaLink}
+                      className="w-4 h-4 mr-3 text-amber-500 focus:ring-amber-500"
+                    />
+                    <div className="flex items-center flex-1">
+                      <ViewGridIcon className="h-4 w-4 text-amber-400 mr-2" />
+                      <div>
+                        <span className="text-sm text-white font-medium">Selection Mode</span>
+                        <p className="text-xs text-slate-400">Allow viewers to select photos.</p>
                       </div>
-                    </label>
-                  </div>
-
-                  {/* Enable Selection Mode Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-600/40 hover:border-slate-500/60 hover:bg-slate-700/20 transition-all duration-300">
-                    <label className="flex items-center cursor-pointer">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={isSelectionMode}
-                          onChange={(e) => {
-                            const enabled = e.target.checked;
-                            setIsSelectionMode(enabled);
-                            if (enabled) {
-                              setSelectionShareUrl("selection-demo-url");
-                            } else {
-                              setSelectionShareUrl("");
-                            }
-                          }}
-                          disabled={updating}
-                          className="sr-only"
-                        />
-                        <div className={`w-11 h-6 rounded-full transition-all duration-300 ${isSelectionMode ? 'bg-amber-500' : 'bg-slate-600'}`}>
-                          <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-transform duration-300 mt-0.5 ${isSelectionMode ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`}></div>
-                        </div>
-                      </div>
-                      <div className="flex items-center ml-4 flex-1">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/20 mr-4">
-                          <ViewGridIcon className="h-5 w-5 text-amber-400" />
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-white font-semibold text-base block mb-1">Enable Selection Mode</span>
-                          <p className="text-slate-400 text-sm leading-relaxed">Allow viewers to select and share specific photos from your gallery</p>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
-              {/* Share Links Section */}
+              {/* Share Links */}
               {(shareUrl && isShareableViaLink) || (isSelectionMode && selectionShareUrl) ? (
-                <div className="border-t border-slate-700/50 pt-8">
-                  <label className="block text-lg font-semibold text-white mb-5">
-                    Generated Links
-                  </label>
-                  
-                  <div className="space-y-4">
-                    {shareUrl && isShareableViaLink && (
-                      <div className="p-4 rounded-2xl bg-slate-700/30 border border-slate-600/40">
-                        <label className="block text-sm font-semibold text-slate-300 mb-3 flex items-center">
-                          <ShareIcon className="w-4 h-4 mr-2" />
-                          Gallery Share Link
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="text"
-                            value={fullShareUrl}
-                            readOnly
-                            className="flex-1 p-3 bg-slate-800/50 text-slate-200 rounded-xl border border-slate-600/30 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent font-mono"
-                          />
-                          <button
-                            onClick={() => copyShareUrl(gallery.slug, shareUrl)}
-                            className="p-3 bg-blue-600/90 hover:bg-blue-600 text-white rounded-xl transition-all duration-200 flex-shrink-0 hover:scale-105 active:scale-95 shadow-lg"
-                            title="Copy Link"
-                          >
-                            <ClipboardCopyIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {isSelectionMode && selectionShareUrl && (
-                      <div className="p-4 rounded-2xl bg-slate-700/30 border border-slate-600/40">
-                        <label className="block text-sm font-semibold text-slate-300 mb-3 flex items-center">
-                          <ViewGridIcon className="w-4 h-4 mr-2" />
-                          Selection Mode Link
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="text"
-                            value={fullUrl}
-                            readOnly
-                            className="flex-1 p-3 bg-slate-800/50 text-slate-200 rounded-xl border border-slate-600/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent font-mono"
-                          />
-                          <button
-                            onClick={() => copyShareUrl(gallery.slug, selectionShareUrl)}
-                            className="p-3 bg-amber-600/90 hover:bg-amber-600 text-white rounded-xl transition-all duration-200 flex-shrink-0 hover:scale-105 active:scale-95 shadow-lg"
-                            title="Copy Selection Link"
-                          >
-                            <ClipboardCopyIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div className="border-t border-slate-700/40 pt-4">
+                  <label className="block text-sm font-medium text-white mb-3">Links</label>
+                  {shareUrl && isShareableViaLink && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={fullShareUrl}
+                        readOnly
+                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-xs font-mono"
+                      />
+                      <button
+                        onClick={() => copyShareUrl(gallery.slug, shareUrl)}
+                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
+                        title="Copy Link"
+                      >
+                        <ClipboardCopyIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                  {isSelectionMode && selectionShareUrl && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={fullUrl}
+                        readOnly
+                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-xs font-mono"
+                      />
+                      <button
+                        onClick={() => copyShareUrl(gallery.slug, selectionShareUrl)}
+                        className="p-2 bg-amber-600 hover:bg-amber-700 rounded-md text-white"
+                        title="Copy Selection Link"
+                      >
+                        <ClipboardCopyIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
 
               {/* Loading State */}
               {updating && (
-                <div className="text-center py-8 border-t border-slate-700/50">
-                  <div className="relative w-8 h-8 mx-auto mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-400 border-t-transparent"></div>
-                  </div>
-                  <p className="text-slate-300 font-medium">
-                    Updating settings...
-                  </p>
+                <div className="text-center py-4">
+                  <div className="w-6 h-6 mx-auto animate-spin border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                  <p className="text-xs text-slate-400 mt-2">Updating...</p>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="border-t border-slate-700/50 pt-6">
+              <div className="border-t border-slate-700/40 pt-4">
                 <button
                   onClick={() => setShowShareModal(false)}
-                  className="w-full py-3 px-4 bg-slate-700/50 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-md text-sm"
                 >
                   Done
                 </button>

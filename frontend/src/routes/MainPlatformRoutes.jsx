@@ -13,10 +13,12 @@ import BookingSettings from "../components/Booking/BookingSettings";
 import ClientManagement from "../components/Clients/ClientManagement";
 import PhotographerSetup from "../components/website/PhotographerSetup";
 import UpgradeComponent from "../components/UpgradeComponent";
+import LensraLanding from "../components/LensraLanding";
 
 export default function MainPlatformRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LensraLanding />} />
       <Route path="/register" element={<RegisterForm />} />
       <Route path="/login" element={<Login />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
