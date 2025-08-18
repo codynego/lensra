@@ -605,6 +605,7 @@ class EnableSelectionModeSerializer(serializers.Serializer):
             title="Disliked",
             user=user
         )
+        print("public_selection_url:", gallery.public_selection_url)
 
         return {
             "gallery_id": gallery.id,

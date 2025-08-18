@@ -32,6 +32,7 @@ class EnableSelectionModeView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
+        print("public_selection_url:", result["public_selection_url"])
 
         return Response({
             "message": "Selection mode enabled.",
