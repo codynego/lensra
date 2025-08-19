@@ -5,7 +5,9 @@ User = settings.AUTH_USER_MODEL
 
 class Photographer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='photographer')
+    years_of_experience = models.PositiveIntegerField(default=0)
     instagram = models.URLField(blank=True, null=True)
+    facebook = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

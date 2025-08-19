@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Gallery, Photo
+from .models import Gallery, Photo, GalleryPreference
 
 @admin.register(Gallery)
 class GalleryAdmin(admin.ModelAdmin):
@@ -16,3 +16,41 @@ class PhotoAdmin(admin.ModelAdmin):
     search_fields = ('caption', 'gallery__title')
     ordering = ('-uploaded_at',)
     filter_horizontal = ('assigned_clients',)
+
+@admin.register(GalleryPreference)
+class GalleryPreferenceAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "allow_public_view",
+        "allow_downloads",
+        "watermark_images",
+        "items_per_page",
+        "default_sort_order",
+        "updated_at",
+    )
+    list_filter = (
+        "allow_public_view",
+        "allow_downloads",
+        "watermark_images",
+        "default_sort_order",
+        "updated_at",
+    )
+    search_fields = ("user__username", "user__email", "watermark_text")
+    readonly_fields = ("updated_at",)
+    fieldsets = (
+        ("User", {
+            "fields": ("user",)
+        }),
+        ("Permissions & Visibility", {
+            "fields": ("allow_public_view", "allow_downloads")
+        }),
+        ("Watermark Settings", {
+            "fields": ("watermark_images", "watermark_text", "watermark_logo")
+        }),
+        ("Display Options", {
+            "fields": ("items_per_page", "default_sort_order")
+        }),
+        ("System", {
+            "fields": ("updated_at",),
+        }),
+    )

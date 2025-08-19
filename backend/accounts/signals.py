@@ -8,6 +8,7 @@ from django.conf import settings
 from .models import User
 from subscription.models import UserSubscription, SubscriptionPlan, Stats
 from studio.models import Studio
+from notification.models import NotificationSettings
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
@@ -52,3 +53,15 @@ def update_user_stats_on_subscription_change(sender, instance, **kwargs):
         stats, _ = Stats.objects.get_or_create(user=instance.user)
         stats.subscription_plan = instance.plan
         stats.save()
+
+
+@receiver(post_save, sender=User)
+def create_notification_settings(sender, instance, created, **kwargs):
+    """
+    Automatically create NotificationSettings when a new User is created.
+    """
+    if created:
+        NotificationSettings.objects.create(user=instance)
+        # Optionally, set default values for notification settings
+        instance.notification_settings.email_notifications = True
+        instance.notification_settings.save()

@@ -16,7 +16,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["username", "email", "location", "phone_number"]
+        fields = ["username", "email", "location", "phone_number", "profile_picture"]
         extra_kwargs = {
             "username": {"required": False},
             "email": {"required": False}, 
@@ -53,7 +53,7 @@ class StudioGeneralInfoSerializer(serializers.ModelSerializer):
 class StudioThemeBrandingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Studio
-        fields = ['primary_color', 'secondary_color', 'font', 'cover_photo']
+        fields = ['primary_color', 'secondary_color', 'font', 'cover_photo', 'theme']
 
 
 
@@ -92,7 +92,7 @@ class StudioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Studio
         fields = [
-            "id", "name", "slug", "tagline", "about", "custom_domain",
+            "id", "name", "slug", "theme", "tagline", "about", "custom_domain",
             "status", "primary_color", "secondary_color", "font",
             "cover_photo", "photographer"
         ]
@@ -134,7 +134,7 @@ class PhotographerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Photographer
-        fields = ["id", "user", "bio", "profile_picture", "location"]
+        fields = ["id", "user"]
 
 
 class PhotoSerializer(serializers.ModelSerializer):

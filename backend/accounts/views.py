@@ -16,9 +16,35 @@ from django.http import HttpResponse
 
 
 
-from .serializers import RegisterSerializer, ProfileSerializer, ChangePasswordSerializer
+from .serializers import RegisterSerializer, \
+    ProfileSerializer, ChangePasswordSerializer, UserProfileSerializer, UserSerializer
+from rest_framework.permissions import IsAuthenticated
 
 User = get_user_model()
+
+class UserDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        serializer = UserProfileSerializer(user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        user = request.user
+        serializer = UserProfileSerializer(user, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class PasswordResetRequestView(APIView):
     def post(self, request):

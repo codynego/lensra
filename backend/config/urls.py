@@ -35,6 +35,8 @@ urlpatterns = [
     path('api/studio/', include('studio.urls')),
     path('api/subscriptions/', include('subscription.urls')),
     path("", landing_or_studio_home, name="home"),
+    path("api/marketing/", include("marketing.urls")),
+    path("api/notifications/", include("notification.urls")),
 
 ]
 

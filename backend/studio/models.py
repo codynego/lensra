@@ -36,6 +36,15 @@ class Studio(models.Model):
     name = models.CharField(max_length=120)
     tagline = models.TextField(blank=True, null=True)
     about = models.TextField(blank=True, null=True)
+    theme = models.CharField(
+        max_length=50,
+        choices=[
+            ("retro", "Retro"),
+            ("minimalist", "Minimalist"),
+            ("magazine", "Magazine"),
+        ],
+        default="modern",
+    )
     slug = models.SlugField(
         unique=True,
         help_text="Used for subdomain: <slug>.<BASE_DOMAIN>",
