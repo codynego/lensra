@@ -16,7 +16,6 @@ def update_user_stats(user):
     storage_used = sum(p.image.size for p in photos if p.image and hasattr(p.image, "size"))
 
     clients_count = Client.objects.filter(photographer__user=user).count()
-    print(f"Clients count: {clients_count}")
     bookings_count = user.bookings.count() if hasattr(user, "bookings") else 0
 
     stats.galleries_count = galleries_count
@@ -24,6 +23,7 @@ def update_user_stats(user):
     stats.storage_used = storage_used
     stats.clients_count = clients_count
     stats.bookings_count = bookings_count
+
     stats.save()
 
     return stats
