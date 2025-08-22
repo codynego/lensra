@@ -4,7 +4,7 @@ from bookings.serializers import ServicePackageSerializer
 # studio/serializers.py
 from rest_framework import serializers
 from photographers.models import Photographer
-from bookings.models import ServicePackage, PhotographerAvailability
+from bookings.models import ServicePackage
 from gallery.models import Photo
 from .models import Studio
 from bookings.serializers import ServicePackageSerializer
@@ -143,12 +143,12 @@ class PhotoSerializer(serializers.ModelSerializer):
         fields = ["id", "image", "caption"]
 
 
-class PhotographerAvailabilitySerializer(serializers.ModelSerializer):
-    day_of_week_display = serializers.CharField(source="get_day_of_week_display", read_only=True)
+# class PhotographerAvailabilitySerializer(serializers.ModelSerializer):
+#     day_of_week_display = serializers.CharField(source="get_day_of_week_display", read_only=True)
 
-    class Meta:
-        model = PhotographerAvailability
-        fields = ["day_of_week", "day_of_week_display", "start_time", "end_time"]
+#     class Meta:
+#         model = PhotographerAvailability
+#         fields = ["day_of_week", "day_of_week_display", "start_time", "end_time"]
 
 
 class PhotographerWebsiteSerializer(serializers.Serializer):
@@ -156,4 +156,4 @@ class PhotographerWebsiteSerializer(serializers.Serializer):
     studio = StudioSerializer()
     packages = ServicePackageSerializer(many=True)
     photos = PhotoSerializer(many=True)
-    availability = PhotographerAvailabilitySerializer(many=True)
+    # availability = PhotographerAvailabilitySerializer(many=True)

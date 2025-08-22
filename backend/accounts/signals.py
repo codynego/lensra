@@ -32,7 +32,7 @@ def delete_profile_picture_on_user_delete(sender, instance, **kwargs):
 @receiver(post_save, sender=Photographer)
 def create_photographer_studio(sender, instance, created, **kwargs):
     if created:
-        Studio.objects.create(photographer=instance)
+        Studio.objects.create(photographer=instance.user)
 
 @receiver(post_save, sender=User)
 def create_user_subscription(sender, instance, created, **kwargs):

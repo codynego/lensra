@@ -43,7 +43,7 @@ class Studio(models.Model):
             ("minimalist", "Minimalist"),
             ("magazine", "Magazine"),
         ],
-        default="modern",
+        default="minimalist",
     )
     slug = models.SlugField(
         unique=True,

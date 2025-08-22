@@ -1,48 +1,38 @@
+# bookings/urls.py
 from django.urls import path
 from .views import (
     ServicePackageListCreateView,
     ServicePackageDetailView,
-    PhotographerAvailabilityListCreateView,
-    PhotographerAvailabilityDetailView,
-    PhotographerBlockedDateListCreateView,
-    PhotographerBlockedDateDetailView,
+    ClientListCreateView,
+    ClientDetailView,
     BookingListCreateView,
     BookingDetailView,
+    BookingPreferenceListCreateView,
+    BookingPreferenceDetailView,
     PaymentListCreateView,
     PaymentDetailView,
-    PhotographerTimeSlotListCreateView,
-    PhotographerTimeSlotDetailView,
-    check_availability,
-    BookingPreferenceDetailUpdateView
+    ClientBookingsView,
 )
 
 urlpatterns = [
-    # Service Packages
-    path('packages/', ServicePackageListCreateView.as_view(), name='package-list-create'),
-    path('packages/<int:pk>/', ServicePackageDetailView.as_view(), name='package-detail'),
+    path("packages/", ServicePackageListCreateView.as_view(), name="servicepackage-list"),
+    path("packages/<int:pk>/", ServicePackageDetailView.as_view(), name="servicepackage-detail"),
 
-    # Photographer Availability
-    path('availability/', PhotographerAvailabilityListCreateView.as_view(), name='availability-list-create'),
-    path('availability/<int:pk>/', PhotographerAvailabilityDetailView.as_view(), name='availability-detail'),
 
-    # Photographer Blocked Dates
-    path('blocked-dates/', PhotographerBlockedDateListCreateView.as_view(), name='blocked-date-list-create'),
-    path('blocked-dates/<int:pk>/', PhotographerBlockedDateDetailView.as_view(), name='blocked-date-detail'),
+    path("clients/", ClientListCreateView.as_view(), name="client-list"),
+    path("clients/<int:pk>/", ClientDetailView.as_view(), name="client-detail"),
 
-    # Bookings
-    path('bookings/', BookingListCreateView.as_view(), name='booking-list-create'),
-    path('bookings/<int:pk>/', BookingDetailView.as_view(), name='booking-detail'),
+    path("bookings/", BookingListCreateView.as_view(), name="booking-list"),
+    path("bookings/<int:pk>/", BookingDetailView.as_view(), name="booking-detail"),
 
-    # Booking availability check (custom endpoint)
-    path('bookings/check-availability/', check_availability, name='booking-check-availability'),
 
-    # Payments
-    path('payments/', PaymentListCreateView.as_view(), name='payment-list-create'),
-    path('payments/<int:pk>/', PaymentDetailView.as_view(), name='payment-detail'),
+    path("preferences/", BookingPreferenceListCreateView.as_view(), name="preference-list"),
+    path("preferences/<int:pk>/", BookingPreferenceDetailView.as_view(), name="preference-detail"),
 
-    # Photographer Time Slots
-    path('time-slots/', PhotographerTimeSlotListCreateView.as_view(), name='time-slot-list-create'),
-    path('time-slots/<int:pk>/', PhotographerTimeSlotDetailView.as_view(), name='time-slot-detail'),
 
-    path("preferences/", BookingPreferenceDetailUpdateView.as_view(), name="booking-preference"),
+    path("payments/", PaymentListCreateView.as_view(), name="payment-list"),
+    path("payments/<int:pk>/", PaymentDetailView.as_view(), name="payment-detail"),
+
+
+    path("clients/<int:pk>/bookings/", ClientBookingsView.as_view(), name="client-bookings"),
 ]

@@ -1,120 +1,138 @@
 from django.db import models
 from django.conf import settings
-from photographers.models import Photographer
-from photographers.models import Client
+from decimal import Decimal
+from photographers.models import Client, Photographer
 
 User = settings.AUTH_USER_MODEL
 
 
+# ----------------------
+# 📌 Service Package
+# ----------------------
 class ServicePackage(models.Model):
     photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="packages"
+        Photographer,
+        on_delete=models.CASCADE,
+        related_name="packages"
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    duration = models.PositiveIntegerField(
+    duration = models.PositiveIntegerField(  # in minutes
         help_text="Length of the session in minutes"
     )
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
 
     def __str__(self):
         return f"{self.title} - {self.photographer.user.username}"
 
 
+# ----------------------
+# 📌 Booking
+# ----------------------
 class Booking(models.Model):
-    STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("confirmed", "Confirmed"),
-        ("completed", "Completed"),
-        ("cancelled", "Cancelled"),
+    STATUS_PENDING = "pending"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+
+    BOOKING_STATUS = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_CONFIRMED, "Confirmed"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    photographer = models.ForeignKey(
+        Photographer,
+        on_delete=models.CASCADE,
+        related_name="bookings"
+    )
     client = models.ForeignKey(
         Client,
         on_delete=models.CASCADE,
         related_name="bookings"
     )
-    
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="bookings"
+    service_package = models.ForeignKey(
+        "ServicePackage",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="bookings"
     )
-    package = models.ForeignKey(
-        ServicePackage, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    date = models.DateField()
-    start_time = models.TimeField()
-    location = models.CharField(max_length=255)
-    notes = models.TextField(blank=True, null=True)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="pending"
-    )
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    created_at = models.DateTimeField(auto_now_add=True)
 
-    def is_guest_booking(self):
-        return self.client is None
+    session_date = models.DateField()
+    session_time = models.TimeField(blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+
+    # Track booking status
+    status = models.CharField(
+        max_length=20, choices=BOOKING_STATUS, default=STATUS_PENDING
+    )
+
+    # Pricing (snapshotted at booking time)
+    package_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+
+    notes = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
-        name = (
-            self.client.get_full_name() if self.client
-            else self.guest_name or "Guest"
-        )
-        return f"Booking by {name} with {self.photographer} on {self.date}"
+        return f"Booking #{self.id} - {self.client.get_full_name()} with {self.photographer.user.get_full_name()}"
+
+    # ---- 💡 Utility methods ----
+    @property
+    def total_paid(self):
+        """Sum of all successful payments for this booking"""
+        return sum(p.amount_paid for p in self.payments.filter(payment_status=Payment.STATUS_PAID))
+
+    @property
+    def balance_due(self):
+        """Remaining balance"""
+        return Decimal(self.package_price) - Decimal(self.total_paid)
+
+    @property
+    def is_fully_paid(self):
+        return self.balance_due <= 0
 
 
-
-
+# ----------------------
+# 📌 Booking Preferences
+# ----------------------
 class BookingPreference(models.Model):
     photographer = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="booking_preference"
+        User, on_delete=models.CASCADE, related_name="booking_preference"
     )
-    
+
     # Availability
     available_days = models.JSONField(
         default=list,
-        help_text="List of days available for booking, e.g., ['Monday', 'Tuesday']"
+        help_text="List of available days, e.g., ['Monday', 'Tuesday']"
     )
-    start_time = models.TimeField(
-        null=True,
-        blank=True,
-        help_text="Earliest time available for bookings"
-    )
-    end_time = models.TimeField(
-        null=True,
-        blank=True,
-        help_text="Latest time available for bookings"
-    )
+    start_time = models.TimeField(null=True, blank=True, help_text="Earliest booking time")
+    end_time = models.TimeField(null=True, blank=True, help_text="Latest booking time")
 
     # Session rules
-    min_notice_hours = models.PositiveIntegerField(
-        default=24,
-        help_text="Minimum notice required before booking (in hours)"
-    )
-    max_future_days = models.PositiveIntegerField(
-        default=180,
-        help_text="How many days in advance clients can book"
-    )
+    min_notice_hours = models.PositiveIntegerField(default=24, help_text="Min notice before booking")
+    max_future_days = models.PositiveIntegerField(default=180, help_text="Max advance days allowed")
     allow_same_day = models.BooleanField(default=False)
 
     # Payment rules
     deposit_required = models.BooleanField(default=False)
-    deposit_percentage = models.PositiveIntegerField(
-        default=0,
-        help_text="Deposit percentage if required"
-    )
+    deposit_percentage = models.PositiveIntegerField(default=0, help_text="Deposit % if required")
 
     # Additional options
-    auto_confirm = models.BooleanField(
-        default=False,
-        help_text="If true, bookings are auto-confirmed without manual approval"
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Additional booking instructions for clients"
-    )
+    auto_confirm = models.BooleanField(default=False, help_text="Auto-confirm without approval")
+    notes = models.TextField(blank=True, help_text="Extra booking instructions")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -127,84 +145,57 @@ class BookingPreference(models.Model):
         return f"{self.photographer.username}'s booking preferences"
 
 
-
+# ----------------------
+# 📌 Payment
+# ----------------------
 class Payment(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_PAID = "paid"
+    STATUS_FAILED = "failed"
+    STATUS_REFUNDED = "refunded"
+
     PAYMENT_STATUS = [
-        ("pending", "Pending"),
-        ("paid", "Paid"),
-        ("failed", "Failed"),
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_REFUNDED, "Refunded"),
     ]
 
-    booking = models.OneToOneField(
-        Booking, on_delete=models.CASCADE, related_name="payment"
+    METHOD_CARD = "card"
+    METHOD_BANK = "bank_transfer"
+    METHOD_WALLET = "wallet"
+    METHOD_CASH = "cash"
+    METHOD_MOBILE = "mobile_money"
+
+    PAYMENT_METHODS = [
+        (METHOD_CARD, "Credit/Debit Card"),
+        (METHOD_BANK, "Bank Transfer"),
+        (METHOD_WALLET, "Wallet/Balance"),
+        (METHOD_CASH, "Cash"),
+        (METHOD_MOBILE, "Mobile Money"),
+    ]
+
+    booking = models.ForeignKey(
+        "Booking", on_delete=models.CASCADE, related_name="payments"
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Payment tracking
+    amount_paid = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
     payment_status = models.CharField(
-        max_length=20, choices=PAYMENT_STATUS, default="pending"
+        max_length=20, choices=PAYMENT_STATUS, default=STATUS_PENDING
     )
-    transaction_id = models.CharField(max_length=255, blank=True, null=True)
+    payment_method = models.CharField(
+        max_length=50, choices=PAYMENT_METHODS, blank=True, null=True
+    )
+
+    transaction_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Payment for Booking #{self.booking.id} - {self.payment_status}"
-
-
-class PhotographerTimeSlot(models.Model):
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="time_slots"
-    )
-    date = models.DateField()
-    start_time = models.TimeField()
-    end_time = models.TimeField()
-    is_booked = models.BooleanField(default=False)
-
-    class Meta:
-        unique_together = ("photographer", "date", "start_time", "end_time")
-        ordering = ["date", "start_time"]
-
-    def __str__(self):
-        return (
-            f"{self.photographer.user.username} - "
-            f"{self.date} {self.start_time}-{self.end_time}"
-        )
-
-
-class PhotographerBlockedDate(models.Model):
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="blocked_dates"
-    )
-    date = models.DateField()
-    reason = models.CharField(max_length=255, blank=True, null=True)
-
-    class Meta:
-        unique_together = ("photographer", "date")
-        ordering = ["date"]
-
-    def __str__(self):
-        return f"{self.photographer.user.username} blocked on {self.date}"
-
-
-class PhotographerAvailability(models.Model):
-    DAYS_OF_WEEK = [
-        (0, "Monday"),
-        (1, "Tuesday"),
-        (2, "Wednesday"),
-        (3, "Thursday"),
-        (4, "Friday"),
-        (5, "Saturday"),
-        (6, "Sunday"),
-    ]
-
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="availabilities"
-    )
-    day_of_week = models.IntegerField(choices=DAYS_OF_WEEK)
-    start_time = models.TimeField()
-    end_time = models.TimeField()
-
-    class Meta:
-        unique_together = ("photographer", "day_of_week")
-        ordering = ["day_of_week", "start_time"]
-
-    def __str__(self):
-        return f"{self.photographer.user.username} - {self.get_day_of_week_display()} {self.start_time}-{self.end_time}"

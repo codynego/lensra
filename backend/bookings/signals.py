@@ -1,19 +1,26 @@
-# from django.db.models.signals import pre_save
-# from django.dispatch import receiver
-# from .models import Booking
-# from django.core.mail import send_mail
-# from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import Payment
 
-# @receiver(pre_save, sender=Booking)
-# def send_status_update_email(sender, instance, **kwargs):
-#     if not instance.pk:
-#         # New booking, ignore here
-#         return
 
-#     previous = Booking.objects.get(pk=instance.pk)
-#     if previous.status != instance.status:
-#         # Status changed, send email to client
-#         subject = f"Your booking status updated to {instance.status.capitalize()}"
-#         message = f"Hello {instance.client.name},\n\nYour booking with {instance.photographer.user.username} on {instance.date} at {instance.start_time} is now '{instance.status}'.\n\nThank you for using Lensra."
-#         recipient_list = [instance.client.email]
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
+@receiver(post_save, sender=Payment)
+def update_booking_status_on_payment(sender, instance, created, **kwargs):
+    """
+    Sync booking status with payment status
+    """
+    booking = instance.booking
+
+    if instance.payment_status == "paid":
+        if booking.status != "confirmed":
+            booking.status = "confirmed"
+            booking.save(update_fields=["status"])
+
+    elif instance.payment_status == "failed":
+        if booking.status != "cancelled":
+            booking.status = "cancelled"
+            booking.save(update_fields=["status"])
+
+    elif instance.payment_status == "pending":
+        if booking.status != "pending":
+            booking.status = "pending"
+            booking.save(update_fields=["status"])

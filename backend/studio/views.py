@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
 from photographers.models import Photographer
-from bookings.models import ServicePackage, PhotographerAvailability
+from bookings.models import ServicePackage
 from gallery.models import Photo
 from .models import Studio
 from .serializers import PhotographerWebsiteSerializer
@@ -76,7 +76,7 @@ class PhotographerWebsitePublicView(APIView):
             visibility="public"
         )
 
-        availability = PhotographerAvailability.objects.filter(photographer=photographer)
+        # availability = PhotographerAvailability.objects.filter(photographer=photographer)
 
         # Serialize
         data = PhotographerWebsiteSerializer({
@@ -84,7 +84,7 @@ class PhotographerWebsitePublicView(APIView):
             "studio": studio,
             "packages": packages,
             "photos": photos,
-            "availability": availability
+            # "availability": availability
         }).data
 
         return Response(data)
