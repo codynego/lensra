@@ -1,81 +1,58 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useApi } from '../useApi';
+import { useAuth } from '../AuthContext'; // Assuming AuthContext is in a file named AuthContext.js
+import { X, CheckCircle, ArrowLeft } from 'lucide-react';
 
-const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
-  const { apiFetch } = useApi();
-  const [loading, setLoading] = useState(false); // Changed from true to false
+const UpgradeComponent = ({ isOpen = true, onClose }) => {
+  const { user, apiFetch } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [currentStats, setCurrentStats] = useState(null);
   const [plans, setPlans] = useState([]);
-  const [dataLoaded, setDataLoaded] = useState(false); // Add flag to track if data has been loaded
-  isOpen = true; // Ensure isOpen is always a boolean
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Memoize the fetch function to prevent recreating it on every render
-  const fetchData = useCallback(async () => {
+  const fetchPlans = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch user stats
-      const statsResponse = await apiFetch('/subscriptions/me/stats/');
-      if (!statsResponse.ok) {
-        throw new Error('Failed to fetch user stats');
-      }
-      const statsData = await statsResponse.json();
-      console.log('Fetched user stats:', statsData);
-      // Convert storage_used from bytes to GB for consistency with UI
-      setCurrentStats({
-        ...statsData,
-        storage_used: statsData.storage_used / (1024 * 1024 * 1024), // Convert bytes to GB
-      });
-
-      // Fetch plans
       const plansResponse = await apiFetch('/subscriptions/plans/');
-      if (!plansResponse.ok) {
-        throw new Error('Failed to fetch plans');
-      }
+      if (!plansResponse.ok) throw new Error('Failed to fetch plans');
       const plansData = await plansResponse.json();
-      
-      // Convert storage_gb from bytes to GB for consistency
       setPlans(
         plansData.map((plan) => ({
           ...plan,
           features: {
-            ...plan.features,
-            storage_gb: plan.features.storage_gb / (1024 * 1024 * 1024), // Convert bytes to GB
+            max_galleries_count: plan.features?.max_galleries_count ?? 0,
+            max_photos_count: plan.features?.max_photos_count ?? 0,
+            storage_gb: plan.features?.storage_gb ? plan.features.storage_gb / (1024 * 1024 * 1024) : 0,
+            max_bookings_count: plan.features?.max_bookings_count ?? 0,
+            max_clients_count: plan.features?.max_clients_count ?? 0,
+            ai_tools: plan.features?.ai_tools ?? [],
+            custom_domain: plan.features?.custom_domain ?? false,
           },
         }))
       );
-      
       setDataLoaded(true);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      setError(error.message || 'Failed to load data');
+      console.error('Error fetching plans:', error);
+      setError(error.message || 'Failed to load plans');
     } finally {
       setLoading(false);
     }
   }, [apiFetch]);
 
-  // Only fetch data when modal opens and data hasn't been loaded yet
   useEffect(() => {
-    if (isOpen && !dataLoaded) {
-      console.log('Fetching data with isOpen:', isOpen);
-      fetchData();
-    }
-  }, [isOpen, dataLoaded, fetchData]);
+    if (isOpen && !dataLoaded) fetchPlans();
+  }, [isOpen, dataLoaded, fetchPlans]);
 
-  // Reset data when modal closes (optional - remove if you want to keep data cached)
   useEffect(() => {
     if (!isOpen) {
       setDataLoaded(false);
-      setCurrentStats(null);
       setPlans([]);
       setError(null);
     }
   }, [isOpen]);
 
-  // Fallback data if API fails or data is not yet loaded
   const defaultStats = {
     galleries_count: 0,
     photos_count: 0,
@@ -92,9 +69,8 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
     plan_name: 'Free',
   };
 
-  const stats = currentStats || defaultStats;
+  const stats = user?.stats || defaultStats;
 
-  // Get usage percentage and color
   const getUsageInfo = (current, max) => {
     if (max === -1 || max === 0) return { percentage: 0, color: '#10B981', status: 'unlimited' };
     const percentage = (current / max) * 100;
@@ -104,37 +80,28 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
   };
 
   const formatLimit = (limit) => {
+    if (limit === undefined || limit === null) return 'N/A';
     if (limit === -1 || limit === 0) return '∞';
     return limit.toLocaleString();
   };
 
-  const formatPrice = (price) => {
-    if (price === 0) return 'Free';
-    return `$${price}/month`;
-  };
+  const formatPrice = (price) => (price === 0 ? 'Free' : `$${price}/month`);
 
   const handleUpgrade = async (plan) => {
     if (plan.name === stats.plan_name) return;
-
     setLoading(true);
     setSelectedPlan(plan.id);
 
     try {
-      // Simulate API call to upgrade plan (replace with actual endpoint)
       const response = await apiFetch('/subscriptions/user-subscriptions/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan_id: plan.id }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to upgrade plan');
-      }
-
+      if (!response.ok) throw new Error('Failed to upgrade plan');
       alert(`Successfully upgraded to ${plan.name} plan!`);
-      onClose(); // Close the modal on successful upgrade
+      onClose();
     } catch (error) {
       console.error('Error upgrading plan:', error);
       setError(error.message || 'Failed to upgrade plan');
@@ -144,172 +111,128 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
     }
   };
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.href = '/dashboard';
+    }
+  };
+
   const isCurrentPlan = (planName) => planName === stats.plan_name;
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-700">
+    <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 flex items-center justify-center z-50 p-4 sm:p-6 overflow-auto">
+      <div className="relative bg-slate-900 rounded-3xl w-full max-w-7xl max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-700/50">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/4 -left-4 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute top-3/4 -right-4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl animate-pulse delay-500" />
+        </div>
+
         {/* Header */}
-        <div className="sticky top-0 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700 p-6 rounded-t-3xl">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-white mb-2">Upgrade Your Plan</h2>
-              <p className="text-gray-400">
-                You're currently on the <span className="text-white font-semibold">{stats.plan_name}</span> plan. 
-                Unlock more features by upgrading.
-              </p>
+        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-xl border-b border-slate-700/50 p-6 sm:p-8 rounded-t-3xl z-10">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleBack}
+                className="text-white hover:text-indigo-300 transition-colors p-2 rounded-full hover:bg-slate-800"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              <div className="text-center sm:text-left">
+                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  Upgrade Your Plan
+                </h2>
+                <p className="text-white text-base sm:text-lg">
+                  You're on the <span className="font-semibold">{stats.plan_name}</span> plan. Unlock premium features with a new plan.
+                </p>
+              </div>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-xl"
+              className="text-white hover:text-indigo-300 transition-colors p-2 rounded-full hover:bg-slate-800"
             >
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
+              <X className="w-6 h-6" />
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-6 sm:p-8 lg:p-12 space-y-12">
           {loading ? (
-            <div className="text-center text-gray-400 text-lg">Loading...</div>
+            <div className="text-center text-white text-lg flex items-center justify-center gap-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-400"></div>
+              Loading...
+            </div>
           ) : error ? (
-            <div className="text-center text-red-400 text-lg">{error}</div>
+            <div className="text-center text-red-400 text-lg bg-red-900/50 border border-red-700/50 rounded-xl p-4">
+              {error}
+            </div>
           ) : (
             <>
               {/* Current Usage Overview */}
-              <div className="bg-gradient-to-br from-gray-800 to-gray-700 rounded-2xl p-6 border border-gray-600/50">
-                <h3 className="text-xl font-semibold text-white mb-6">Current Usage Overview</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Galleries */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300 font-medium">Galleries</span>
-                      <span className="text-white font-bold">
-                        {stats.galleries_count} / {formatLimit(stats.plan_limits.max_galleries_count)}
-                      </span>
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-2xl p-6 sm:p-8 border border-slate-700/50 backdrop-blur-xl">
+                <h3 className="text-xl sm:text-2xl font-semibold text-white mb-6 text-center">Current Usage</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
+                  {[
+                    { label: 'Galleries', current: stats.galleries_count ?? 0, max: stats.plan_limits?.max_galleries_count ?? 5 },
+                    { label: 'Photos', current: stats.photos_count ?? 0, max: stats.plan_limits?.max_photos_count ?? 500 },
+                    { label: 'Storage', current: (stats.storage_used_gb ?? 0).toFixed(2), max: stats.plan_limits?.storage_gb ?? 5, unit: 'GB' },
+                    { label: 'Bookings', current: stats.bookings_count ?? 0, max: stats.plan_limits?.max_bookings_count ?? 100 },
+                    { label: 'Clients', current: stats.clients_count ?? 0, max: stats.plan_limits?.max_clients_count ?? 100 },
+                  ].map((item, index) => (
+                    <div key={index} className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white font-medium">{item.label}</span>
+                        <span className="text-white font-bold">
+                          {item.unit ? `${item.current} ${item.unit}` : item.current} / {formatLimit(item.max)} {item.unit || ''}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500 shadow-lg"
+                          style={{
+                            width: `${getUsageInfo(item.current, item.max).percentage}%`,
+                            backgroundColor: getUsageInfo(item.current, item.max).color,
+                          }}
+                        ></div>
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 shadow-lg"
-                        style={{
-                          width: `${getUsageInfo(stats.galleries_count, stats.plan_limits.max_galleries_count).percentage}%`,
-                          backgroundColor: getUsageInfo(stats.galleries_count, stats.plan_limits.max_galleries_count).color,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Photos */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300 font-medium">Photos</span>
-                      <span className="text-white font-bold">
-                        {stats.photos_count} / {formatLimit(stats.plan_limits.max_photos_count)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 shadow-lg"
-                        style={{
-                          width: `${getUsageInfo(stats.photos_count, stats.plan_limits.max_photos_count).percentage}%`,
-                          backgroundColor: getUsageInfo(stats.photos_count, stats.plan_limits.max_photos_count).color,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Storage */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300 font-medium">Storage</span>
-                      <span className="text-white font-bold">
-                        {stats.storage_used.toFixed(2)} GB / {formatLimit(stats.plan_limits.storage_gb)} GB
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 shadow-lg"
-                        style={{
-                          width: `${getUsageInfo(stats.storage_used, stats.plan_limits.storage_gb).percentage}%`,
-                          backgroundColor: getUsageInfo(stats.storage_used, stats.plan_limits.storage_gb).color,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Bookings */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300 font-medium">Bookings</span>
-                      <span className="text-white font-bold">
-                        {stats.bookings_count} / {formatLimit(stats.plan_limits.max_bookings_count)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 shadow-lg"
-                        style={{
-                          width: `${getUsageInfo(stats.bookings_count, stats.plan_limits.max_bookings_count).percentage}%`,
-                          backgroundColor: getUsageInfo(stats.bookings_count, stats.plan_limits.max_bookings_count).color,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Clients */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300 font-medium">Clients</span>
-                      <span className="text-white font-bold">
-                        {stats.clients_count} / {formatLimit(stats.plan_limits.max_clients_count)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 shadow-lg"
-                        style={{
-                          width: `${getUsageInfo(stats.clients_count, stats.plan_limits.max_clients_count).percentage}%`,
-                          backgroundColor: getUsageInfo(stats.clients_count, stats.plan_limits.max_clients_count).color,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 
               {/* Plan Options */}
               <div className="space-y-6">
-                <h3 className="text-2xl font-semibold text-white text-center">Choose Your Plan</h3>
-                
+                <h3 className="text-2xl sm:text-3xl font-semibold text-white text-center bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  Choose Your Plan
+                </h3>
                 {plans.length === 0 ? (
-                  <div className="text-center text-gray-400 text-lg">No plans available</div>
+                  <div className="text-center text-white text-lg bg-slate-800/50 rounded-xl p-4">No plans available</div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
                     {plans.map((plan) => (
                       <div
                         key={plan.id}
-                        className={`relative bg-gradient-to-b from-gray-800 to-gray-700 rounded-2xl p-6 border transition-all duration-300 ${
+                        className={`relative group bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl p-6 border transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/10 ${
                           isCurrentPlan(plan.name)
                             ? 'border-green-500 shadow-lg shadow-green-500/20'
                             : plan.popular
-                            ? 'border-blue-500 shadow-lg shadow-blue-500/20 scale-105'
-                            : 'border-gray-600 hover:border-gray-500'
-                        }`}
+                            ? 'border-indigo-500 shadow-lg shadow-indigo-500/20 scale-105'
+                            : 'border-slate-700/50 hover:border-indigo-500/30'
+                        } backdrop-blur-xl`}
                       >
-                        {/* Popular Badge */}
+                        {/* Badges */}
                         {plan.popular && (
                           <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                            <span className="bg-blue-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
+                            <span className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
                               Most Popular
                             </span>
                           </div>
                         )}
-
-                        {/* Current Plan Badge */}
                         {isCurrentPlan(plan.name) && (
                           <div className="absolute -top-3 right-4">
                             <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
@@ -318,46 +241,38 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
                           </div>
                         )}
 
+                        {/* Plan Details */}
                         <div className="text-center mb-6">
                           <h4 className="text-2xl font-bold text-white mb-2">{plan.name}</h4>
-                          <div className="text-4xl font-extrabold text-white mb-2">
+                          <div className="text-4xl font-extrabold text-white mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                             {formatPrice(plan.price)}
                           </div>
-                          <p className="text-gray-400 text-sm">{plan.description}</p>
+                          <p className="text-white text-sm max-w-xs mx-auto">{plan.description}</p>
                         </div>
 
                         {/* Features */}
-                        <div className="space-y-4 mb-8">
-                          <div className="flex justify-between items-center py-2 border-b border-gray-600/50">
-                            <span className="text-gray-300">Galleries</span>
-                            <span className="text-white font-semibold">{formatLimit(plan.features.max_galleries_count)}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-gray-600/50">
-                            <span className="text-gray-300">Photos</span>
-                            <span className="text-white font-semibold">{formatLimit(plan.features.max_photos_count)}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-gray-600/50">
-                            <span className="text-gray-300">Storage</span>
-                            <span className="text-white font-semibold">{formatLimit(plan.features.storage_gb)} GB</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-gray-600/50">
-                            <span className="text-gray-300">Bookings</span>
-                            <span className="text-white font-semibold">{formatLimit(plan.features.max_bookings_count)}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-gray-600/50">
-                            <span className="text-gray-300">Clients</span>
-                            <span className="text-white font-semibold">{formatLimit(plan.features.max_clients_count)}</span>
-                          </div>
+                        <div className="space-y-3 mb-8">
+                          {[
+                            { label: 'Galleries', value: plan.features.max_galleries_count },
+                            { label: 'Photos', value: plan.features.max_photos_count },
+                            { label: 'Storage', value: plan.features.storage_gb, unit: 'GB' },
+                            { label: 'Bookings', value: plan.features.max_bookings_count },
+                            { label: 'Clients', value: plan.features.max_clients_count },
+                          ].map((feature, index) => (
+                            <div key={index} className="flex justify-between items-center py-2 border-b border-slate-700/50">
+                              <span className="text-white">{feature.label}</span>
+                              <span className="text-white font-semibold">{formatLimit(feature.value)} {feature.unit || ''}</span>
+                            </div>
+                          ))}
 
-                          {/* AI Tools */}
                           {plan.features.ai_tools?.length > 0 && (
-                            <div className="pt-2">
-                              <span className="text-gray-300 text-sm block mb-2">AI Tools:</span>
-                              <div className="flex flex-wrap gap-1">
+                            <div className="pt-3">
+                              <span className="text-white text-sm block mb-2">AI Tools:</span>
+                              <div className="flex flex-wrap gap-2">
                                 {plan.features.ai_tools.map((tool, index) => (
                                   <span
                                     key={index}
-                                    className="text-xs px-2 py-1 bg-blue-500/20 text-blue-300 rounded-full border border-blue-500/30"
+                                    className="text-xs px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30"
                                   >
                                     {tool.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                                   </span>
@@ -366,12 +281,9 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
                             </div>
                           )}
 
-                          {/* Custom Domain */}
                           {plan.features.custom_domain && (
-                            <div className="flex items-center gap-2 pt-2">
-                              <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
+                            <div className="flex items-center gap-2 pt-3">
+                              <CheckCircle className="w-4 h-4 text-green-400" />
                               <span className="text-green-400 text-sm font-medium">Custom Domain</span>
                             </div>
                           )}
@@ -383,10 +295,10 @@ const UpgradeComponent = ({ isOpen, onClose, BRAND_COLOR = '#3B82F6' }) => {
                           disabled={isCurrentPlan(plan.name) || loading}
                           className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-300 ${
                             isCurrentPlan(plan.name)
-                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                              ? 'bg-slate-700 text-white cursor-not-allowed'
                               : plan.popular
-                              ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg hover:shadow-blue-500/30'
-                              : 'bg-gray-600 hover:bg-gray-500 text-white'
+                              ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-lg hover:shadow-indigo-500/30'
+                              : 'bg-gradient-to-r from-slate-700 to-slate-600 text-white hover:from-indigo-600 hover:to-purple-700'
                           }`}
                         >
                           {loading && selectedPlan === plan.id ? (

@@ -187,10 +187,10 @@ const DomainSettingsForm = ({ isPremium = false }) => {
   if (initialLoading) {
     return (
       <div className="w-full max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
-            <span className="ml-2 text-gray-600">Loading domain settings...</span>
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            <span className="ml-2 text-slate-400">Loading domain settings...</span>
           </div>
         </div>
       </div>
@@ -200,26 +200,26 @@ const DomainSettingsForm = ({ isPremium = false }) => {
   if (!isPremium) {
     return (
       <div className="w-full max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-50 to-amber-50 px-6 py-4 border-b border-gray-200">
+        <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 border-b border-slate-800">
             <div className="flex items-center">
-              <Crown className="w-6 h-6 text-orange-600 mr-2" />
+              <Crown className="w-6 h-6 text-pink-400 mr-2" />
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Domain Settings</h2>
-                <p className="text-gray-600 mt-1">Premium Feature - Custom domain configuration</p>
+                <h2 className="text-2xl font-bold text-slate-100">Domain Settings</h2>
+                <p className="text-slate-400 mt-1">Premium Feature - Custom domain configuration</p>
               </div>
             </div>
           </div>
 
           <div className="p-8 text-center">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Crown className="w-8 h-8 text-orange-600" />
+            <div className="w-16 h-16 bg-indigo-900 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Crown className="w-8 h-8 text-pink-400" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Premium Feature</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            <h3 className="text-xl font-semibold text-slate-100 mb-2">Premium Feature</h3>
+            <p className="text-slate-400 mb-6 max-w-md mx-auto">
               Custom domain functionality is available for premium subscribers. Upgrade your plan to use your own domain name.
             </p>
-            <div className="space-y-3 text-sm text-gray-500 mb-6">
+            <div className="space-y-3 text-sm text-slate-400 mb-6">
               <div className="flex items-center justify-center">
                 <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
                 Custom domain (yourdomain.com)
@@ -233,7 +233,7 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                 Professional appearance
               </div>
             </div>
-            <button className="bg-orange-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-700 transition-colors">
+            <button className="bg-gradient-to-r from-indigo-500 to-purple-600 text-slate-100 px-6 py-3 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-700 transition-colors">
               Upgrade to Premium
             </button>
           </div>
@@ -244,28 +244,28 @@ const DomainSettingsForm = ({ isPremium = false }) => {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 px-6 py-4 border-b border-gray-200">
+      <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 border-b border-slate-800">
           <div className="flex items-center">
-            <Globe className="w-6 h-6 text-orange-600 mr-2" />
+            <Globe className="w-6 h-6 text-pink-400 mr-2" />
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Domain Settings</h2>
-              <p className="text-gray-600 mt-1">Configure your custom domain and SSL settings</p>
+              <h2 className="text-2xl font-bold text-slate-100">Domain Settings</h2>
+              <p className="text-slate-400 mt-1">Configure your custom domain and SSL settings</p>
             </div>
           </div>
         </div>
 
         {success && (
-          <div className="mx-6 mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
-            <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-            <span className="text-green-800">{success}</span>
+          <div className="mx-6 mt-4 p-4 bg-green-900 border border-green-800 rounded-lg flex items-center">
+            <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+            <span className="text-green-300">{success}</span>
           </div>
         )}
 
         {apiError && (
-          <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
-            <span className="text-red-800">{apiError}</span>
+          <div className="mx-6 mt-4 p-4 bg-red-900 border border-red-800 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+            <span className="text-red-300">{apiError}</span>
           </div>
         )}
 
@@ -273,7 +273,7 @@ const DomainSettingsForm = ({ isPremium = false }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   Custom Domain
                 </label>
                 <div className="flex">
@@ -283,13 +283,13 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                     value={formData.customDomain}
                     onChange={handleChange}
                     placeholder="yourdomain.com"
-                    className="flex-1 border-gray-300 rounded-l-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                    className="flex-1 border-slate-700 bg-slate-800 text-slate-100 rounded-l-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   />
                   <button
                     type="button"
                     onClick={verifyDomain}
                     disabled={loading}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-r-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500"
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-slate-100 rounded-r-lg hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify"}
                   </button>
@@ -303,9 +303,9 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                   name="enableSsl"
                   checked={formData.enableSsl}
                   onChange={handleChange}
-                  className="h-4 w-4 text-orange-600 border-gray-300 rounded"
+                  className="h-4 w-4 text-indigo-500 border-slate-700 rounded"
                 />
-                <label htmlFor="enableSsl" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="enableSsl" className="ml-2 block text-sm text-slate-300">
                   Enable SSL (HTTPS)
                 </label>
               </div>
@@ -317,9 +317,9 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                   name="redirectWww"
                   checked={formData.redirectWww}
                   onChange={handleChange}
-                  className="h-4 w-4 text-orange-600 border-gray-300 rounded"
+                  className="h-4 w-4 text-indigo-500 border-slate-700 rounded"
                 />
-                <label htmlFor="redirectWww" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="redirectWww" className="ml-2 block text-sm text-slate-300">
                   Redirect www.yourdomain.com to yourdomain.com
                 </label>
               </div>
@@ -328,7 +328,7 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500"
+                className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-slate-100 rounded-lg shadow-sm hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                 Save Settings
@@ -337,7 +337,7 @@ const DomainSettingsForm = ({ isPremium = false }) => {
 
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Domain Status</h3>
+                <h3 className="text-lg font-semibold text-slate-100 mb-4">Domain Status</h3>
                 <div className="space-y-4">
                   <div className="flex items-center">
                     {domainStatus.verified ? (
@@ -345,7 +345,7 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                     ) : (
                       <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
                     )}
-                    <span className="text-gray-800">
+                    <span className="text-slate-100">
                       {domainStatus.verified ? "Domain Verified" : "Domain Not Verified"}
                     </span>
                   </div>
@@ -355,12 +355,12 @@ const DomainSettingsForm = ({ isPremium = false }) => {
                     ) : (
                       <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
                     )}
-                    <span className="text-gray-800">
+                    <span className="text-slate-100">
                       {domainStatus.sslActive ? "SSL Active" : "SSL Not Active"}
                     </span>
                   </div>
                   {domainStatus.lastChecked && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-slate-400">
                       Last checked: {new Date(domainStatus.lastChecked).toLocaleString()}
                     </p>
                   )}
@@ -369,16 +369,16 @@ const DomainSettingsForm = ({ isPremium = false }) => {
 
               {formData.customDomain && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">DNS Instructions</h4>
-                  <p className="text-sm text-gray-600 mb-2">
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">DNS Instructions</h4>
+                  <p className="text-sm text-slate-400 mb-2">
                     Point your domain's CNAME or A record to:
                   </p>
-                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <code className="flex-1 text-sm text-gray-800">studio.example.com</code>
+                  <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                    <code className="flex-1 text-sm text-slate-100">studio.example.com</code>
                     <button
                       type="button"
                       onClick={() => copyToClipboard("studio.example.com")}
-                      className="ml-2 text-gray-500 hover:text-gray-700"
+                      className="ml-2 text-slate-400 hover:text-slate-200"
                     >
                       {copySuccess ? (
                         <CheckCircle className="w-4 h-4 text-green-500" />

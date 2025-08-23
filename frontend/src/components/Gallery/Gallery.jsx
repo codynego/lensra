@@ -3,10 +3,10 @@ import GalleryCard from "./GalleryCard";
 import GalleryHeadersAndControls from "./GalleryHeadersAndControls";
 import GalleryPreview from "./GalleryPreview";
 import { useAuth } from "../../AuthContext";
-import { useApi } from "../../useApi";
-import { Plus, Folder, Search, Grid3X3, List, Filter, SortAsc } from "lucide-react";
+import { Plus, Folder, X } from "lucide-react";
 
 const Gallery = ({ theme }) => {
+  const { apiFetch, user, checkPlanLimits, upgradePrompt, setUpgradePrompt, isAuthenticated } = useAuth();
   const [galleries, setGalleries] = useState([]);
   const [publicGalleries, setPublicGalleries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,13 +26,48 @@ const Gallery = ({ theme }) => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [userGalleries, setUserGalleries] = useState([]);
-  const { isAuthenticated } = useAuth();
-  const { apiFetch } = useApi();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newGalleryTitle, setNewGalleryTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const { canCreateGallery } = user?.stats
+    ? checkPlanLimits("check")
+    : { canCreateGallery: false };
 
   const normalizeGallery = (g) => ({
     ...g,
     cover_image: g.cover_image || g.cover_photo || null,
+    photo_count: g.photo_count || 0,
   });
+
+  useEffect(() => {
+    const savedState = localStorage.getItem("galleryState");
+    if (savedState) {
+      const { activeTab: savedTab, selectedGalleryId } = JSON.parse(savedState);
+      setActiveTab(savedTab || "my-galleries");
+      if (selectedGalleryId) {
+        const fetchGallery = async () => {
+          try {
+            setLoading(true);
+            const response = await apiFetch(`/gallery/galleries/${selectedGalleryId}/`, { method: "GET" });
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            setSelectedGallery(normalizeGallery(data));
+          } catch (err) {
+            setError(err.message || "Failed to restore gallery view");
+            localStorage.removeItem("galleryState");
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchGallery();
+      } else {
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
+    }
+  }, [apiFetch]);
 
   useEffect(() => {
     if (activeTab === "my-galleries") {
@@ -61,6 +96,7 @@ const Gallery = ({ theme }) => {
         ...(data.shared_galleries || []),
       ].map(normalizeGallery));
     } catch (err) {
+      console.error("fetchOrganizedGalleries error:", err);
       setError(err.message || "Failed to fetch galleries");
     } finally {
       setLoading(false);
@@ -77,6 +113,7 @@ const Gallery = ({ theme }) => {
       const items = Array.isArray(data) ? data : data.results || [];
       setPublicGalleries(items.map((item) => normalizeGallery(item.gallery)));
     } catch (err) {
+      console.error("fetchPublicGalleries error:", err);
       setError(err.message || "Failed to fetch public galleries");
     } finally {
       setLoading(false);
@@ -86,15 +123,16 @@ const Gallery = ({ theme }) => {
   const fetchUserGalleries = async () => {
     try {
       const response = await apiFetch(`/gallery/galleries/`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
       });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      setUserGalleries(data || []);
+      setUserGalleries((Array.isArray(data) ? data : data.results || []).map(normalizeGallery));
     } catch (err) {
       console.error("fetchUserGalleries error:", err);
       setError(err.message || "Failed to load your galleries");
+      setUserGalleries([]);
     }
   };
 
@@ -119,8 +157,56 @@ const Gallery = ({ theme }) => {
     }
   };
 
-  const handleSelectGallery = (gallery) => setSelectedGallery(gallery);
-  const handleBackToGalleries = () => setSelectedGallery(null);
+  const handleSelectGallery = (gallery) => {
+    setSelectedGallery(normalizeGallery(gallery));
+    localStorage.setItem("galleryState", JSON.stringify({
+      activeTab,
+      selectedGalleryId: gallery.id,
+    }));
+  };
+
+  const handleBackToGalleries = () => {
+    setSelectedGallery(null);
+    localStorage.removeItem("galleryState");
+  };
+
+  const handleCreateGallery = async () => {
+    if (!newGalleryTitle.trim()) {
+      setError("Gallery title cannot be empty.");
+      return;
+    }
+    if (!canCreateGallery) {
+      const { message } = checkPlanLimits("createGallery");
+      setUpgradePrompt({ type: "galleries", message });
+      return;
+    }
+    setCreating(true);
+    try {
+      const response = await apiFetch(`/gallery/galleries/create/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newGalleryTitle, description: "" }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.error || "Failed to create gallery.");
+      }
+      const data = await response.json();
+      setGalleries((prev) => [normalizeGallery(data), ...prev]);
+      setOrganizedGalleries((prev) => ({
+        ...prev,
+        owned_galleries: [normalizeGallery(data), ...prev.owned_galleries],
+      }));
+      setNewGalleryTitle("");
+      setShowCreateForm(false);
+      setError(`Gallery "${newGalleryTitle}" created successfully!`, "success");
+      localStorage.setItem("galleryState", JSON.stringify({ activeTab }));
+    } catch (err) {
+      setError(err.message || "Failed to create gallery");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const toggleSelection = (id) => {
     const itemId = `gallery-${id}`;
@@ -160,7 +246,7 @@ const Gallery = ({ theme }) => {
       clearSelection();
       setError(`${selectedItems.size} galleries deleted successfully!`, "success");
     } catch (err) {
-      setError("Failed to delete selected galleries");
+      setError(err.message || "Failed to delete selected galleries");
     }
   };
 
@@ -188,7 +274,7 @@ const Gallery = ({ theme }) => {
   };
 
   const handleOpenMoveModal = async () => {
-    if (userGalleries.length === 0) {
+    if (!Array.isArray(userGalleries) || userGalleries.length === 0) {
       await fetchUserGalleries();
     }
     setShowMoveModal(true);
@@ -231,8 +317,14 @@ const Gallery = ({ theme }) => {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
-        <div className="animate-pulse text-lg font-medium text-gray-600 dark:text-white">Loading galleries...</div>
+      <div
+        className={`min-h-screen flex items-center justify-center ${
+          theme === "dark" ? "bg-gray-900" : "bg-gray-50"
+        }`}
+      >
+        <div className="animate-pulse text-lg font-medium text-gray-600 dark:text-white">
+          Loading galleries...
+        </div>
       </div>
     );
   }
@@ -244,6 +336,8 @@ const Gallery = ({ theme }) => {
         onBack={handleBackToGalleries}
         onError={setError}
         theme={theme}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
       />
     );
   }
@@ -251,7 +345,52 @@ const Gallery = ({ theme }) => {
   const filteredGalleries = getFilteredGalleries();
 
   return (
-    <div className={`min-h-screen p-6 md:p-8 max-w-7xl mx-auto ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
+    <div
+      className={`min-h-screen p-6 md:p-8 max-w-7xl mx-auto ${
+        theme === "dark" ? "bg-gray-900" : "bg-gray-50"
+      }`}
+    >
+      {upgradePrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div
+            className={`${
+              theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+            } rounded-2xl w-full max-w-md border shadow-2xl p-6`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                Upgrade Your Plan
+              </h3>
+              <button
+                onClick={() => setUpgradePrompt(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mb-6`}>
+              {upgradePrompt.message}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setUpgradePrompt(null);
+                  window.location.href = "/upgrade";
+                }}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-medium"
+              >
+                Upgrade Now
+              </button>
+              <button
+                onClick={() => setUpgradePrompt(null)}
+                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <GalleryHeadersAndControls
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -278,14 +417,58 @@ const Gallery = ({ theme }) => {
         onClearSelection={clearSelection}
         onBulkDelete={handleBulkDelete}
         onBulkMove={handleOpenMoveModal}
-        canEdit={true} // Assuming can edit top-level galleries
+        canEdit={isAuthenticated}
       />
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-200 text-sm font-medium animate-fade-in">
-          {error}
+      {showCreateForm && (
+        <div
+          className={`${
+            theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+          } rounded-xl p-6 shadow-lg mb-6`}
+        >
+          <h3 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"} mb-4`}>
+            Create New Gallery
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              placeholder="Enter gallery title..."
+              value={newGalleryTitle}
+              onChange={(e) => setNewGalleryTitle(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter" && newGalleryTitle.trim() && !creating) {
+                  handleCreateGallery();
+                }
+              }}
+              className={`flex-1 px-4 py-3 ${
+                theme === "dark" ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+              } border rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium`}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreateGallery}
+                disabled={creating || !newGalleryTitle.trim() || !canCreateGallery}
+                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creating ? "Creating..." : "Create"}
+              </button>
+              <button
+                onClick={() => setShowCreateForm(false)}
+                className={`px-6 py-3 ${
+                  theme === "dark" ? "bg-gray-700 hover:bg-gray-600 text-white" : "bg-gray-200 hover:bg-gray-300 text-gray-900"
+                } rounded-lg font-medium transition-all duration-300`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-2'}`}>
+      <div
+        className={`grid gap-6 ${
+          viewMode === "grid" ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" : "grid-cols-2"
+        }`}
+      >
         {filteredGalleries.map((gallery) => (
           <GalleryCard
             key={gallery.id}
@@ -299,32 +482,71 @@ const Gallery = ({ theme }) => {
           />
         ))}
       </div>
+      {isAuthenticated && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => {
+              if (!canCreateGallery) {
+                const { message } = checkPlanLimits("createGallery");
+                setUpgradePrompt({ type: "galleries", message });
+                return;
+              }
+              setShowCreateForm(true);
+            }}
+            disabled={!canCreateGallery}
+            className="w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Create New Gallery"
+          >
+            <Plus className="w-6 h-6" />
+          </button>
+        </div>
+      )}
       {showMoveModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl w-full max-w-md border shadow-2xl`}>
+          <div
+            className={`${
+              theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+            } rounded-2xl w-full max-w-md border shadow-2xl`}
+          >
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                Move Galleries
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className={`text-xl font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  Move Galleries
+                </h3>
+                <button
+                  onClick={() => setShowMoveModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               <p className="text-gray-600 dark:text-gray-400 mt-2">
                 Select a destination gallery for {selectedItems.size} galleries
               </p>
             </div>
             <div className="p-6 max-h-80 overflow-y-auto space-y-2">
-              {userGalleries.map((targetGallery) => (
-                <button
-                  key={targetGallery.id}
-                  onClick={() => handleBulkMove(targetGallery.id)}
-                  className={`w-full flex items-center gap-4 px-4 py-3 ${theme === 'dark' ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-50 text-gray-900'} rounded-xl transition-all duration-300 text-left`}
-                >
-                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                    <Folder className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium">{targetGallery.title}</h4>
-                  </div>
-                </button>
-              ))}
+              {userGalleries.length > 0 ? (
+                userGalleries.map((targetGallery) => (
+                  <button
+                    key={targetGallery.id}
+                    onClick={() => handleBulkMove(targetGallery.id)}
+                    className={`w-full flex items-center gap-4 px-4 py-3 ${
+                      theme === "dark" ? "hover:bg-gray-700 text-white" : "hover:bg-gray-50 text-gray-900"
+                    } rounded-xl transition-all duration-300 text-left`}
+                  >
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                      <Folder className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium">{targetGallery.title}</h4>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                  No galleries available
+                </p>
+              )}
             </div>
             <div className="p-6 border-t border-gray-200 dark:border-gray-700">
               <button

@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
 
   const [loading, setLoading] = useState(true);
   const [lastTokenRefresh, setLastTokenRefresh] = useState(0);
+  const [upgradePrompt, setUpgradePrompt] = useState(null); // { type: "photos" | "galleries" | "storage", message: string }
 
   const fetchUserProfile = useCallback(async () => {
     if (!authTokens?.access) return null;
@@ -131,6 +132,61 @@ export function AuthProvider({ children }) {
     }
   }, [authTokens, lastTokenRefresh, logout]);
 
+const checkPlanLimits = useCallback(
+  (action, data = {}) => {
+    if (!user?.stats?.plan_limits) {
+      console.warn("No stats or plan_limits available for limit checking");
+      return { canCreateGallery: false, canUploadPhotos: false, canCreateClient: false, message: "Plan limits not available" };
+    }
+
+    const {
+      max_storage,
+      max_galleries_count,
+      max_photos_count,
+      max_clients: max_clients,
+    } = user.stats.plan_limits;
+    const { galleries_count = 0, photos_count = 0, storage_used = 0, clients_count = 0 } = user.stats;
+
+    console.log("Checking plan limits:", {
+      action,
+      max_storage,
+      max_galleries_count,
+      max_photos_count,
+      max_clients,
+      galleries_count,
+      photos_count,
+      storage_used,
+      clients_count,
+      data,
+    });
+
+    const result = {
+      canCreateGallery: galleries_count < max_galleries_count,
+      canUploadPhotos: photos_count < max_photos_count && storage_used < max_storage,
+      canCreateClient: clients_count < max_clients,
+      message: null,
+    };
+
+    if (action === "createGallery" && !result.canCreateGallery) {
+      result.message = `You have reached your limit of ${max_galleries_count} galleries. Upgrade your plan to create more.`;
+    } else if (action === "uploadPhotos") {
+      const files = data.files || [];
+      const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
+      if (photos_count + files.length > max_photos_count) {
+        result.canUploadPhotos = false;
+        result.message = `You have reached your limit of ${max_photos_count} photos. Upgrade your plan to upload more.`;
+      } else if (storage_used + totalSize > max_storage) {
+        result.canUploadPhotos = false;
+        result.message = `You have exceeded your storage limit of ${(max_storage / (1024 * 1024 * 1024)).toFixed(2)} GB. Upgrade your plan for more storage.`;
+      }
+    } else if (action === "createClient" && !result.canCreateClient) {
+      result.message = `You have reached your limit of ${max_clients} clients. Upgrade your plan to add more.`;
+    }
+
+    return result;
+  },
+  [user]
+);
   const apiFetch = useCallback(
     async (url, options = {}) => {
       const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
@@ -139,14 +195,12 @@ export function AuthProvider({ children }) {
       const opts = {
         ...options,
         headers: {
-          // Only set Content-Type for non-FormData requests
           ...(isFormData ? {} : { "Content-Type": "application/json" }),
           ...options.headers,
           ...(authTokens?.access && { Authorization: `Bearer ${authTokens.access}` }),
         },
       };
 
-      // Log headers and body for debugging
       console.log("apiFetch URL:", fullUrl);
       console.log("apiFetch options:", opts);
       if (isFormData) {
@@ -171,9 +225,38 @@ export function AuthProvider({ children }) {
         response = await fetch(fullUrl, opts);
       }
 
+      if (response.status === 403 && user?.stats?.plan_limits) {
+        try {
+          const errorData = await response.json();
+          const message = errorData.error || errorData.detail || "Plan limit exceeded";
+          if (message.includes("photos limit")) {
+            setUpgradePrompt({
+              type: "photos",
+              message: `You have reached your limit of ${user.stats.plan_limits.max_photos_count} photos. Upgrade your plan to upload more.`,
+            });
+          } else if (message.includes("galleries limit")) {
+            setUpgradePrompt({
+              type: "galleries",
+              message: `You have reached your limit of ${user.stats.plan_limits.max_galleries_count} galleries. Upgrade your plan to create more.`,
+            });
+          } else if (message.includes("storage limit")) {
+            setUpgradePrompt({
+              type: "storage",
+              message: `You have exceeded your storage limit of ${(user.stats.plan_limits.max_storage / (1024 * 1024 * 1024)).toFixed(2)} GB. Upgrade your plan for more storage.`,
+            });
+          }
+        } catch (err) {
+          console.error("Error parsing 403 response:", err);
+          setUpgradePrompt({
+            type: "general",
+            message: "Plan limit exceeded. Please upgrade your plan.",
+          });
+        }
+      }
+
       return response;
     },
-    [authTokens, refreshAccessToken]
+    [authTokens, refreshAccessToken, user]
   );
 
   const fetchUserStats = useCallback(async () => {
@@ -277,6 +360,9 @@ export function AuthProvider({ children }) {
       isAuthenticated: !!authTokens,
       token: authTokens?.access || null,
       user,
+      upgradePrompt,
+      setUpgradePrompt,
+      checkPlanLimits,
     }),
     [
       authState,
@@ -291,6 +377,8 @@ export function AuthProvider({ children }) {
       apiFetch,
       authTokens,
       user,
+      upgradePrompt,
+      checkPlanLimits,
     ]
   );
 

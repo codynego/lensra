@@ -8,7 +8,7 @@ import BookingManagement from './Booking/BookingManagement';
 import ClientManagement from './Clients/ClientManagement';
 import PhotographerSetup from './website/PhotographerSetup';
 import Settings from './settings/Settings';
-import AiToolSetup from './AiToolSetup';
+import AiToolsDashboard from './AiToolsDashboard';
 import { 
   Menu, 
   X, 
@@ -267,7 +267,7 @@ const PhotographerDashboard = () => {
             {activeTab === 'Gallery' && <Gallery theme={theme} />}
             {activeTab === 'Clients' && <ClientManagement theme={theme} />}
             {activeTab === 'Studio' && <PhotographerSetup theme={theme} />}
-            {activeTab === 'AI Tools' && <AiToolSetup theme={theme} />}
+            {activeTab === 'AI Tools' && <AiToolsDashboard theme={theme} />}
             {activeTab === 'Settings' && <Settings theme={theme} />}
           </div>
         </main>

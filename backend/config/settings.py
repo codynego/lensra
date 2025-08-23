@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'subscription',
     'marketing',
     'notification',
+    'aitools',
 ]
 SITE_ID = 1
 

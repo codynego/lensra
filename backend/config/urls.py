@@ -37,6 +37,8 @@ urlpatterns = [
     path("", landing_or_studio_home, name="home"),
     path("api/marketing/", include("marketing.urls")),
     path("api/notifications/", include("notification.urls")),
+    path("api/aitools/", include("aitools.urls")),
+
 
 ]
 

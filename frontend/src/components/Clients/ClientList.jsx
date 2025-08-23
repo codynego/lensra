@@ -32,10 +32,7 @@ const formatCurrency = (value) => {
 };
 
 const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'light' }) => {
-  // Assume these are passed as props or from context
-  const { apiFetch, authState } = useAuth();
-
-
+  const { apiFetch, authState, user, checkPlanLimits, upgradePrompt, setUpgradePrompt } = useAuth();
   const apiFetchRef = useRef(apiFetch);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +46,11 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
   const debounceTimeout = useRef(null);
+
+  // Check if user can create clients
+  const { canCreateClient } = user?.stats?.plan_limits
+    ? checkPlanLimits("check")
+    : { canCreateClient: false };
 
   // Update apiFetchRef
   useEffect(() => {
@@ -71,14 +73,14 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
         throw new Error(`Failed to load clients: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      console.log('API Response (loadClients):', data); // Debug: Log raw API response
+      console.log('API Response (loadClients):', data);
       const normalizedClients = data.results.map(client => ({
         ...client,
         total_bookings: Number(client.total_bookings) || 0,
         total_spent: Number(client.total_spent) || 0,
         last_booking_date: client.last_booking_date || null,
       }));
-      console.log('Normalized Clients:', normalizedClients); // Debug: Log processed clients
+      console.log('Normalized Clients:', normalizedClients);
       setClients(normalizedClients);
       setTotalCount(data.count || 0);
     } catch (err) {
@@ -119,7 +121,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
         const response = await apiFetchRef.current(`/photographers/clients/${id}/`, {
           method: 'DELETE',
         });
-        console.log('Delete Client Response:', response); // Debug: Log response
+        console.log('Delete Client Response:', response);
         if (!response.ok) {
           throw new Error(`Failed to delete client: ${response.status} ${response.statusText}`);
         }
@@ -131,6 +133,16 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
       }
     }
   }, [loadClients]);
+
+  // Handle client creation with limit check
+  const handleCreateClient = useCallback(() => {
+    if (!canCreateClient) {
+      const { message } = checkPlanLimits("createClient");
+      setUpgradePrompt({ type: "clients", message });
+      return;
+    }
+    onCreateClient();
+  }, [canCreateClient, checkPlanLimits, onCreateClient, setUpgradePrompt]);
 
   // Pagination
   const handlePageChange = useCallback((newPage) => {
@@ -166,24 +178,27 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
             return 0;
         }
       });
-    console.log('Filtered and Sorted Clients:', filtered); // Debug: Log filtered clients
+    console.log('Filtered and Sorted Clients:', filtered);
     return filtered;
   }, [clients, searchTerm, filterStatus, sortBy]);
 
   // Calculate stats
+  const totalClients = user?.stats?.clients_count || totalCount;
+  const maxClients = user?.stats?.plan_limits?.max_clients || 0;
+  const isClientLimitReached = totalClients >= maxClients;
   const stats = useMemo(() => {
     const totalRevenue = clients.reduce((sum, client) => sum + (Number(client.total_spent) || 0), 0);
     const activeClients = clients.filter(c => (c.total_bookings || 0) > 0).length;
     const avgRevenuePerClient = clients.length > 0 ? totalRevenue / clients.length : 0;
 
-    console.log('Stats:', { totalClients: totalCount, totalRevenue, activeClients, avgRevenuePerClient }); // Debug: Log stats
+    console.log('Stats:', { totalClients, totalRevenue, activeClients, avgRevenuePerClient });
     return {
-      totalClients: totalCount,
+      totalClients,
       totalRevenue,
       activeClients,
       avgRevenuePerClient,
     };
-  }, [clients, totalCount]);
+  }, [clients, totalClients]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
   const isDark = theme === 'dark';
@@ -244,6 +259,48 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
   return (
     <div className={`min-h-screen p-4 md:p-6 lg:p-8 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Upgrade Popup */}
+        {upgradePrompt && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div
+              className={`${
+                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              } rounded-2xl w-full max-w-md border shadow-2xl p-6`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Upgrade Your Plan
+                </h3>
+                <button
+                  onClick={() => setUpgradePrompt(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-6`}>
+                {upgradePrompt.message}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setUpgradePrompt(null);
+                    window.location.href = '/upgrade';
+                  }}
+                  className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-medium"
+                >
+                  Upgrade Now
+                </button>
+                <button
+                  onClick={() => setUpgradePrompt(null)}
+                  className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -253,6 +310,25 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
             <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               Manage your client relationships and bookings
             </p>
+            <div className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <span>
+                <strong>Client Limit:</strong>{' '}
+                <span className={isClientLimitReached ? 'text-red-500 dark:text-red-400 font-semibold' : ''}>
+                  {totalClients}/{maxClients}
+                </span>
+                {isClientLimitReached && (
+                  <button
+                    onClick={() => {
+                      const { message } = checkPlanLimits('createClient');
+                      setUpgradePrompt({ type: 'clients', message });
+                    }}
+                    className="ml-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-semibold"
+                  >
+                    Upgrade to add more
+                  </button>
+                )}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -276,8 +352,13 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
               {viewMode === 'grid' ? 'Table' : 'Grid'}
             </button>
             <button
-              onClick={onCreateClient}
-              className="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-indigo-500/20"
+              onClick={handleCreateClient}
+              disabled={!canCreateClient}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white transition-all duration-200 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-indigo-500/20 ${
+                canCreateClient
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                  : 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+              }`}
               aria-label="Add new client"
             >
               <Plus className="w-4 h-4" />
@@ -408,8 +489,13 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
             </p>
             {(!searchTerm && filterStatus === 'all') && (
               <button
-                onClick={onCreateClient}
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md hover:shadow-lg focus:ring-4 focus:ring-indigo-500/20"
+                onClick={handleCreateClient}
+                disabled={!canCreateClient}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg focus:ring-4 focus:ring-indigo-500/20 ${
+                  canCreateClient
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-gray-400 dark:bg-gray-600 text-white cursor-not-allowed'
+                }`}
                 aria-label="Add first client"
               >
                 Add Your First Client
@@ -497,7 +583,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          console.log('Selected Client:', client); // Debug: Log selected client
+                          console.log('Selected Client:', client);
                           onSelectClient(client);
                         }}
                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
@@ -510,7 +596,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                       </button>
                       <button
                         onClick={() => {
-                          console.log('Editing Client:', client); // Debug: Log editing client
+                          console.log('Editing Client:', client);
                           onEditClient(client);
                         }}
                         className={`p-2.5 rounded-lg transition-all duration-200 ${
@@ -579,7 +665,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
-                                console.log('Selected Client:', client); // Debug: Log selected client
+                                console.log('Selected Client:', client);
                                 onSelectClient(client);
                               }}
                               className={`text-indigo-600 hover:text-indigo-800 ${isDark ? 'hover:text-indigo-400' : ''}`}
@@ -589,7 +675,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                             </button>
                             <button
                               onClick={() => {
-                                console.log('Editing Client:', client); // Debug: Log editing client
+                                console.log('Editing Client:', client);
                                 onEditClient(client);
                               }}
                               className={`text-gray-600 hover:text-gray-800 ${isDark ? 'text-gray-300 hover:text-gray-100' : ''}`}

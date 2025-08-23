@@ -5,8 +5,9 @@ import GalleryHeadersAndControls from "./GalleryHeadersAndControls";
 import { useAuth } from "../../AuthContext";
 import { ArrowLeft, Upload, FolderPlus, X, Folder, Plus } from "lucide-react";
 
-const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
-  const { apiFetch } = useAuth();
+const GalleryPreview = ({ gallery, onBack, onError, theme, activeTab, setActiveTab }) => {
+  console.log("GalleryPreview props:", { gallery, activeTab });
+  const { apiFetch, user, checkPlanLimits, upgradePrompt, setUpgradePrompt } = useAuth();
   const [photos, setPhotos] = useState([]);
   const [subGalleries, setSubGalleries] = useState([]);
   const [filteredPhotos, setFilteredPhotos] = useState([]);
@@ -34,12 +35,16 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
   const fileInputRef = useRef(null);
   const canEdit = gallery?.can_share !== false;
 
-  useEffect(() => {
-  }, [gallery, subGalleries]);
+  const { canCreateGallery, canUploadPhotos } = user?.stats
+    ? checkPlanLimits("check").canCreateGallery && checkPlanLimits("check").canUploadPhotos
+      ? { canCreateGallery: true, canUploadPhotos: true }
+      : checkPlanLimits("check")
+    : { canCreateGallery: false, canUploadPhotos: false };
 
   const normalizeGallery = (g) => ({
     ...g,
     cover_image: g.cover_image || g.cover_photo || null,
+    photo_count: g.photo_count || 0,
   });
 
   const fetchGalleryDetails = useCallback(async () => {
@@ -55,7 +60,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       setPhotos(data.photos || []);
-      setSubGalleries(data.sub_galleries || []);
+      setSubGalleries((data.sub_galleries || []).map(normalizeGallery));
     } catch (err) {
       onError(err.message || "Failed to load gallery details");
     } finally {
@@ -72,6 +77,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
       onError("Cannot upload: Invalid gallery ID");
       return;
     }
+    if (!canUploadPhotos) {
+      const { message } = checkPlanLimits("uploadPhotos");
+      setUpgradePrompt({ type: "photos", message });
+      return;
+    }
     const files = Array.from(e.target.files);
     if (!files.length) return;
     try {
@@ -80,7 +90,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         formData.append("image", file);
         formData.append("gallery", gallery.id);
       });
-      const response = await apiFetch("/api/gallery/photos/", {
+      const response = await apiFetch("/gallery/photos/", {
         method: "POST",
         body: formData,
       });
@@ -148,11 +158,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ caption: newCaption.trim() }),
       });
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Rename photo failed with status:", response.status, "Response:", errorText);
-        throw new Error(errorText || "Failed to rename photo");
-      }
+      if (!response.ok) throw new Error(await response.text());
       await fetchGalleryDetails();
       onError("Photo renamed successfully!", "success");
     } catch (err) {
@@ -175,17 +181,10 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle.trim() }),
       });
-    //   console.log("Rename gallery request:", { url: `/gallery/galleries/${galleryId}/`, body: { title: newTitle.trim() } });
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Rename gallery failed with status:", response.status, "Response:", errorText);
-        throw new Error(errorText || "Failed to rename gallery");
-      }
-      const data = await response.json();
+      if (!response.ok) throw new Error(await response.text());
       await fetchGalleryDetails();
       onError("Gallery renamed successfully!", "success");
     } catch (err) {
-      console.error("Rename gallery error:", err);
       onError(err.message || "Failed to rename gallery");
     }
   };
@@ -319,19 +318,10 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("fetchUserGalleries failed with status:", response.status, "Response:", errorText);
-        throw new Error(errorText || "Failed to fetch galleries");
-      }
+      if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      const galleries = Array.isArray(data)
-        ? data
-        : data.owned_galleries || data.galleries || data.results || [];
-      if (galleries.length === 0) {
-        console.warn("No galleries returned from API");
-      }
-      setUserGalleries(galleries);
+      const galleries = Array.isArray(data) ? data : data.results || [];
+      setUserGalleries(galleries.map(normalizeGallery));
     } catch (err) {
       console.error("fetchUserGalleries error:", err);
       onError(err.message || "Failed to load your galleries");
@@ -344,6 +334,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
   const handleCreateSubGallery = async () => {
     if (!newGalleryTitle.trim()) {
       onError("Gallery title cannot be empty.");
+      return;
+    }
+    if (!canCreateGallery) {
+      const { message } = checkPlanLimits("createGallery");
+      setUpgradePrompt({ type: "galleries", message });
       return;
     }
     setCreating(true);
@@ -368,7 +363,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
       setShowCreateForm(false);
       onError(`Sub-gallery "${newGalleryTitle}" created successfully!`, "success");
       setShowActions(false);
-      await fetchUserGalleries();
+      localStorage.setItem("galleryState", JSON.stringify({
+        activeTab: activeTab || "my-galleries",
+        selectedGalleryId: gallery.id,
+      }));
+      window.location.reload();
     } catch (err) {
       onError(err.message || "Failed to create sub-gallery");
     } finally {
@@ -381,13 +380,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverGalleryId(galleryId);
-    console.log("Dragging over gallery ID:", galleryId);
   };
 
   const handleDragLeave = (e) => {
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setDragOverGalleryId(null);
-      console.log("Drag left gallery");
     }
   };
 
@@ -398,35 +395,21 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
     try {
       const data = JSON.parse(e.dataTransfer.getData("application/json"));
       const photoIds = data.photoIds;
-      console.log("Dropped photo IDs:", photoIds, "on gallery:", targetGalleryId);
       if (photoIds && photoIds.length > 0) {
-        const maxRetries = 2;
-        for (let retry = 0; retry <= maxRetries; retry++) {
-          try {
-            const results = await Promise.allSettled(
-              photoIds.map((photoId) =>
-                apiFetch(`/gallery/photo/move/`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    photo_id: photoId,
-                    target_gallery_id: targetGalleryId,
-                  }),
-                }).then((res) => {
-                  if (!res.ok) throw new Error(`Failed to move photo ${photoId}`);
-                  return res;
-                })
-              )
-            );
-            const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
-            if (errors.length) throw new Error(`Failed to move some photos: ${errors.join(", ")}`);
-            break;
-          } catch (err) {
-            if (retry === maxRetries) throw err;
-            console.warn(`Retry ${retry + 1}/${maxRetries} for moving photos:`, err);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
+        const results = await Promise.allSettled(
+          photoIds.map((photoId) =>
+            apiFetch(`/gallery/photo/move/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                photo_id: photoId,
+                target_gallery_id: targetGalleryId,
+              }),
+            })
+          )
+        );
+        const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
+        if (errors.length) throw new Error(`Failed to move some photos: ${errors.join(", ")}`);
         await fetchGalleryDetails();
         clearSelection();
         onError(`${photoIds.length} photo${photoIds.length > 1 ? "s" : ""} moved successfully!`, "success");
@@ -434,7 +417,6 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         onError("No photos selected to move");
       }
     } catch (error) {
-      console.error("Drop error:", error);
       onError(error.message || "Failed to move photos");
     }
   };
@@ -444,13 +426,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setIsBackDragOver(true);
-    console.log("Dragging over back button");
   };
 
   const handleBackDragLeave = (e) => {
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setIsBackDragOver(false);
-      console.log("Drag left back button");
     }
   };
 
@@ -461,35 +441,21 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
     try {
       const data = JSON.parse(e.dataTransfer.getData("application/json"));
       const photoIds = data.photoIds;
-      console.log("Dropped photo IDs:", photoIds, "on parent gallery:", gallery.parent_gallery);
       if (photoIds && photoIds.length > 0) {
-        const maxRetries = 2;
-        for (let retry = 0; retry <= maxRetries; retry++) {
-          try {
-            const results = await Promise.allSettled(
-              photoIds.map((photoId) =>
-                apiFetch(`/gallery/photo/move/`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    photo_id: photoId,
-                    target_gallery_id: gallery.parent_gallery,
-                  }),
-                }).then((res) => {
-                  if (!res.ok) throw new Error(`Failed to move photo ${photoId}`);
-                  return res;
-                })
-              )
-            );
-            const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
-            if (errors.length) throw new Error(`Failed to move some photos: ${errors.join(", ")}`);
-            break;
-          } catch (err) {
-            if (retry === maxRetries) throw err;
-            console.warn(`Retry ${retry + 1}/${maxRetries} for moving photos to parent:`, err);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
+        const results = await Promise.allSettled(
+          photoIds.map((photoId) =>
+            apiFetch(`/gallery/photo/move/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                photo_id: photoId,
+                target_gallery_id: gallery.parent_gallery,
+              }),
+            })
+          )
+        );
+        const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
+        if (errors.length) throw new Error(`Failed to move some photos: ${errors.join(", ")}`);
         await fetchGalleryDetails();
         clearSelection();
         onError(`${photoIds.length} photo${photoIds.length > 1 ? "s" : ""} moved to parent gallery!`, "success");
@@ -497,7 +463,6 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         onError("No photos selected to move");
       }
     } catch (error) {
-      console.error("Back drop error:", error);
       onError(error.message || "Failed to move photos to parent gallery");
     }
   };
@@ -520,6 +485,11 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
       onError("Cannot upload: Invalid gallery ID");
       return;
     }
+    if (!canUploadPhotos) {
+      const { message } = checkPlanLimits("uploadPhotos");
+      setUpgradePrompt({ type: "photos", message });
+      return;
+    }
     const files = Array.from(e.dataTransfer.files);
     if (!files.length) return;
     try {
@@ -528,7 +498,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         formData.append("image", file);
         formData.append("gallery", gallery.id);
       });
-      const response = await apiFetch("/api/gallery/photos/", {
+      const response = await apiFetch("/gallery/photos/", {
         method: "POST",
         body: formData,
       });
@@ -576,41 +546,21 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
     if (!confirmed) return;
     setIsMoving(true);
     try {
-      const maxRetries = 2;
       const errors = [];
       for (const targetGalleryId of targetGalleryIds) {
-        for (let retry = 0; retry <= maxRetries; retry++) {
-          try {
-            const results = await Promise.allSettled(
-              photoIds.map((photoId) =>
-                apiFetch(`/gallery/photo/move/`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    photo_id: photoId,
-                    target_gallery_id: targetGalleryId,
-                  }),
-                }).then((res) => {
-                  if (!res.ok) throw new Error(`Failed to move photo ${photoId} to gallery ${targetGalleryId}`);
-                  return res;
-                })
-              )
-            );
-            const moveErrors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
-            if (moveErrors.length) {
-              errors.push(...moveErrors);
-              break;
-            }
-            break;
-          } catch (err) {
-            if (retry === maxRetries) {
-              errors.push(err.message);
-              break;
-            }
-            console.warn(`Retry ${retry + 1}/${maxRetries} for moving photos to gallery ${targetGalleryId}:`, err);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
+        const results = await Promise.allSettled(
+          photoIds.map((photoId) =>
+            apiFetch(`/gallery/photo/move/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                photo_id: photoId,
+                target_gallery_id: targetGalleryId,
+              }),
+            })
+          )
+        );
+        errors.push(...results.filter((r) => r.status === "rejected").map((r) => r.reason.message));
       }
       if (errors.length) throw new Error(`Failed to move some photos: ${errors.join(", ")}`);
       await fetchGalleryDetails();
@@ -621,7 +571,6 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         "success"
       );
     } catch (err) {
-      console.error("Bulk move error:", err);
       onError(err.message || "Failed to move photos to selected galleries");
     } finally {
       setIsMoving(false);
@@ -656,6 +605,8 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         onBack={() => setSelectedSubGallery(null)}
         onError={onError}
         theme={theme}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
       />
     );
   }
@@ -669,6 +620,47 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
       onDragLeave={handleMainDragLeave}
       onDrop={handleDrop}
     >
+      {upgradePrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div
+            className={`${
+              theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+            } rounded-2xl w-full max-w-md border shadow-2xl p-6`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                Upgrade Your Plan
+              </h3>
+              <button
+                onClick={() => setUpgradePrompt(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mb-6`}>
+              {upgradePrompt.message}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setUpgradePrompt(null);
+                  window.location.href = "/upgrade";
+                }}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-medium"
+              >
+                Upgrade Now
+              </button>
+              <button
+                onClick={() => setUpgradePrompt(null)}
+                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className={`sticky top-0 z-30 ${theme === "dark" ? "bg-gray-900/95" : "bg-white/95"} backdrop-blur-xl border-b ${
           theme === "dark" ? "border-gray-800" : "border-gray-200"
@@ -715,6 +707,8 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
           canEdit={canEdit}
           theme={theme}
           organizedGalleries={{ owned_galleries: [], assigned_galleries: [], shared_galleries: [] }}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
         />
         {showCreateForm && (
           <div
@@ -744,7 +738,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
               <div className="flex gap-2">
                 <button
                   onClick={handleCreateSubGallery}
-                  disabled={creating || !newGalleryTitle.trim()}
+                  disabled={creating || !newGalleryTitle.trim() || !canCreateGallery}
                   className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {creating ? "Creating..." : "Create"}
@@ -763,7 +757,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         )}
         <div
           className={`grid gap-6 ${
-            viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-2'
+            viewMode === "grid" ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" : "grid-cols-2"
           }`}
         >
           {itemsToDisplay().map((item) => (
@@ -805,20 +799,32 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
             <>
               <button
                 onClick={() => {
+                  if (!canUploadPhotos) {
+                    const { message } = checkPlanLimits("uploadPhotos");
+                    setUpgradePrompt({ type: "photos", message });
+                    return;
+                  }
                   fileInputRef.current?.click();
                   setShowActions(false);
                 }}
-                className="w-12 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center animate-fade-in"
+                disabled={!canUploadPhotos}
+                className="w-12 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center animate-fade-in disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Upload Photos"
               >
                 <Upload className="w-6 h-6" />
               </button>
               <button
                 onClick={() => {
+                  if (!canCreateGallery) {
+                    const { message } = checkPlanLimits("createGallery");
+                    setUpgradePrompt({ type: "galleries", message });
+                    return;
+                  }
                   setShowCreateForm(true);
                   setShowActions(false);
                 }}
-                className="w-12 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center animate-fade-in"
+                disabled={!canCreateGallery}
+                className="w-12 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center animate-fade-in disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Create Sub-Gallery"
               >
                 <FolderPlus className="w-6 h-6" />
@@ -840,6 +846,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
         multiple
         accept="image/*"
         onChange={handleFileUpload}
+        disabled={!canUploadPhotos}
       />
       {showMoveModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -855,7 +862,7 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
                 </h3>
                 <button
                   onClick={() => setShowMoveModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-300"
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -875,10 +882,6 @@ const GalleryPreview = ({ gallery, onBack, onError, theme }) => {
               ) : Array.isArray(userGalleries) && userGalleries.length > 0 ? (
                 (() => {
                   const availableGalleries = userGalleries.filter((g) => g.id !== gallery.id);
-                  console.log("All userGalleries:", userGalleries);
-                  console.log("Current gallery ID:", gallery.id);
-                  console.log("Sub-galleries IDs:", subGalleries.map((sg) => sg.id));
-                  console.log("Available galleries after filter:", availableGalleries);
                   return availableGalleries.length > 0 ? (
                     availableGalleries.map((targetGallery) => (
                       <div
