@@ -25,24 +25,6 @@ const AiToolsDashboard = ({ theme = 'dark' }) => {
       component: SmartEditor
     },
     {
-      id: 'ai-enhancer',
-      title: 'AI Enhancer',
-      description: 'Enhance image quality and resolution using AI',
-      icon: Sparkles,
-      category: 'Enhancement',
-      available: false,
-      component: AiEnhancer
-    },
-    {
-      id: 'ai-color-grading',
-      title: 'AI Color Grading',
-      description: 'Apply cinematic color grading automatically',
-      icon: Palette,
-      category: 'Color',
-      available: false,
-      component: AiColorGrading
-    },
-    {
       id: 'background-removal',
       title: 'Background Removal',
       description: 'Remove backgrounds with pixel-perfect precision',
@@ -52,32 +34,59 @@ const AiToolsDashboard = ({ theme = 'dark' }) => {
       component: BackgroundRemoval
     },
     {
-      id: 'object-removal',
-      title: 'Object Removal',
-      description: 'Erase unwanted objects seamlessly',
-      icon: Eraser,
-      category: 'Manipulation',
+      id: 'Others',
+      title: 'other tools',
+      description: 'Apply cinematic color grading automatically',
+      icon: Palette,
+      category: 'Color',
       available: false,
-      component: ObjectRemoval
+      component: AiColorGrading
     },
-    {
-      id: 'face-swap',
-      title: 'Face Swap',
-      description: 'Swap faces with realistic AI technology',
-      icon: Users,
-      category: 'Creative',
-      available: false,
-      component: FaceSwap
-    },
-    {
-      id: 'ai-auto-culling',
-      title: 'AI Auto-Culling',
-      description: 'Automatically select the best shots from batches',
-      icon: Image,
-      category: 'Organization',
-      available: false,
-      component: AiAutoCulling
-    }
+    // {
+    //   id: 'ai-enhancer',
+    //   title: 'AI Enhancer',
+    //   description: 'Enhance image quality and resolution using AI',
+    //   icon: Sparkles,
+    //   category: 'Enhancement',
+    //   available: false,
+    //   component: AiEnhancer
+    // },
+    // {
+    //   id: 'ai-color-grading',
+    //   title: 'AI Color Grading',
+    //   description: 'Apply cinematic color grading automatically',
+    //   icon: Palette,
+    //   category: 'Color',
+    //   available: false,
+    //   component: AiColorGrading
+    // },
+    // {
+    //   id: 'object-removal',
+    //   title: 'Object Removal',
+    //   description: 'Erase unwanted objects seamlessly',
+    //   icon: Eraser,
+    //   category: 'Manipulation',
+    //   available: false,
+    //   component: ObjectRemoval
+    // },
+    // {
+    //   id: 'face-swap',
+    //   title: 'Face Swap',
+    //   description: 'Swap faces with realistic AI technology',
+    //   icon: Users,
+    //   category: 'Creative',
+    //   available: false,
+    //   component: FaceSwap
+    // },
+    // {
+    //   id: 'ai-auto-culling',
+    //   title: 'AI Auto-Culling',
+    //   description: 'Automatically select the best shots from batches',
+    //   icon: Image,
+    //   category: 'Organization',
+    //   available: false,
+    //   component: AiAutoCulling
+    // }
   ];
 
   const categories = [...new Set(tools.map(tool => tool.category))];
