@@ -5,6 +5,7 @@ import BookingConfirmation from "../components/Booking/BookingConfirmation";
 import SharedView from "../components/SharedView";
 import PhotographerWebsite from "../components/website/PhotographerWebsite";
 import SelectionView from "../components/SelectionView";
+import ModernPhotographerWebsite from "../components/website/ModernPhotographerWebsite";
 
 export default function PublicSiteRoutes({ subdomain }) {
   return (
@@ -20,12 +21,12 @@ export default function PublicSiteRoutes({ subdomain }) {
       {subdomain ? (
         <Route
           path="/*"
-          element={<PhotographerWebsite subdomain={subdomain} />}
+          element={<ModernPhotographerWebsite subdomain={subdomain} />}
         />
       ) : (
         <Route
           path="/:slug"
-          element={<PhotographerWebsite />}
+          element={<ModernPhotographerWebsite />}
         />
       )}
 

@@ -12,13 +12,16 @@ import BlockedDates from "../components/Booking/BlockedDates";
 import BookingSettings from "../components/Booking/BookingSettings";
 import ClientManagement from "../components/Clients/ClientManagement";
 import PhotographerSetup from "../components/website/PhotographerSetup";
-import UpgradeComponent from "../components/UpgradeComponent";
+// import UpgradeComponent from "../components/UpgradeComponent2";
 import LensraLanding from "../components/LensraLanding";
+import LensraWaitlist from "../components/LensraWaitlist";
+import Page404 from "../components/404Page";
 
 export default function MainPlatformRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LensraLanding />} />
+      <Route path="/" element={<LensraWaitlist />} />
+      <Route path="/home" element={<LensraLanding />} />
       <Route path="/register" element={<RegisterForm />} />
       <Route path="/login" element={<Login />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
@@ -31,9 +34,9 @@ export default function MainPlatformRoutes() {
       <Route path="/admin/settings" element={<ProtectedRoute><BookingSettings /></ProtectedRoute>} />
       <Route path="/admin/clients" element={<ProtectedRoute><ClientManagement /></ProtectedRoute>} />
       <Route path="/setup" element={<ProtectedRoute><PhotographerSetup /></ProtectedRoute>} />
-      <Route path="/upgrade" element={<ProtectedRoute><UpgradeComponent /></ProtectedRoute>} />
+      {/* <Route path="/upgrade" element={<ProtectedRoute><UpgradeComponent /></ProtectedRoute>} /> */}
 
-      {/* <Route path="*" element={<Navigate to="/login" />} /> */}
+      <Route path="/404page" element={<Page404 />} />
     </Routes>
   );
 }

@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import GalleryCard from "./GalleryCard";
 import PhotoCard from "./PhotoCard";
-import { useApi } from "../../useApi";
 import { useAuth } from "../../AuthContext";
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -10,24 +9,36 @@ import {
   Grid3X3, 
   List, 
   MoreHorizontal, 
-  Plus, 
   Upload, 
   ArrowLeft,
-  Filter,
-  SortAsc,
   Folder,
   Image,
   Heart,
   Move,
   Trash2,
-  Check
+  Check,
+  Plus as PlusIcon,
+  Filter,
+  SortAsc,
+  Eye,
+  X,
+  FolderPlus,
+  Settings,
+  CheckSquare,
+  Square,
+  Download,
+  Share2
 } from 'lucide-react';
 
 const GalleryView = ({ 
   gallery, 
   onBack, 
-  onError
+  onError,
+  theme
 }) => {
+  const { authState, apiFetch } = useAuth();
+  const navigate = useNavigate();
+  const apiFetchRef = useRef(apiFetch);
   const [photos, setPhotos] = useState([]);
   const [subGalleries, setSubGalleries] = useState([]);
   const [filteredPhotos, setFilteredPhotos] = useState([]);
@@ -46,73 +57,48 @@ const GalleryView = ({
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
-  const [draggedPhotoId, setDraggedPhotoId] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [draggedPhotoIds, setDraggedPhotoIds] = useState([]);
   const [userGalleries, setUserGalleries] = useState([]);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [isBackDragOver, setIsBackDragOver] = useState(false);
-  const [userStats, setUserStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [dragOverGalleryId, setDragOverGalleryId] = useState(null);
 
   const fileInputRef = useRef(null);
-  const { token, isAuthenticated } = useAuth();
-  const { apiFetch } = useApi();
-  const navigate = useNavigate();
-  const apiFetchRef = useRef(apiFetch);
   const canEdit = gallery?.can_share !== false;
   const isSharedView = gallery?.access_type && gallery.access_type !== 'owner';
 
-  // Update apiFetchRef when apiFetch changes
+  const fetchGalleryDetails = useCallback(async (galleryId) => {
+    try {
+      const response = await apiFetchRef.current(`/gallery/galleries/${galleryId}/`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setPhotos(data.photos || []);
+      setSubGalleries(data.sub_galleries || []);
+    } catch (err) {
+      console.error("fetchGalleryDetails error:", err);
+      onError(err.message || "Failed to load gallery details");
+    }
+  }, [apiFetchRef, onError]);
+
   useEffect(() => {
     apiFetchRef.current = apiFetch;
   }, [apiFetch]);
-
-  // Fetch user stats to check plan limits
-  async function loadUserStats() {
-    let isMounted = true;
-    try {
-      console.log('Fetching /subscriptions/me/stats/');
-      setStatsLoading(true);
-      const response = await apiFetchRef.current('/subscriptions/me/stats/');
-      if (!response || !response.ok) {
-        throw new Error('Failed to fetch user stats');
-      }
-      const data = await response.json();
-      // Ensure max_galleries_count is a valid number
-      if (data?.plan_limits?.max_galleries_count === undefined || data?.galleries_count === undefined) {
-        throw new Error('Invalid user stats data');
-      }
-      if (isMounted) {
-        setUserStats(data);
-        console.log('User stats loaded:', data);
-      }
-    } catch (err) {
-      console.error('Error loading user stats:', err);
-      setUserStats(null); // Reset userStats to prevent invalid data
-    } finally {
-      if (isMounted) {
-        setStatsLoading(false);
-      }
-    }
-    return () => {
-      isMounted = false;
-    };
-  }
 
   useEffect(() => {
     if (gallery) {
       fetchGalleryDetails(gallery.id);
       setShowAddToCollectionButton(
-        isAuthenticated && 
+        authState.isAuthenticated && 
         isSharedView && 
-        !gallery.accessible_users?.some(user => user.id === getCurrentUserId())
+        !gallery.accessible_users?.some(user => user.id === authState.user?.id)
       );
     }
-    // Load user stats when component mounts
-    if (isAuthenticated && canEdit) {
-      loadUserStats();
-    }
-  }, [gallery, isAuthenticated, isSharedView, canEdit]);
+  }, [gallery, authState.isAuthenticated, isSharedView, authState.user?.id, fetchGalleryDetails]);
 
   useEffect(() => {
     let filtered = [...photos];
@@ -174,37 +160,23 @@ const GalleryView = ({
     setFilteredSubGalleries(filtered);
   }, [subGalleries, searchQuery, sortBy]);
 
-  const getCurrentUserId = () => {
-    return null;
-  };
-
   const normalizeGallery = (g) => ({
     ...g,
     cover_image: g.cover_image || g.cover_photo || null,
   });
 
-  // Plan limit check functions
   function isAtGalleryLimit() {
+    const userStats = authState.user?.stats;
     if (!userStats?.plan_limits) return false;
-
     const maxGalleries = parseInt(userStats.plan_limits.max_galleries_count, 10);
     const currentGalleries = parseInt(userStats.galleries_count || 0, 10);
-
-    // Handle invalid or missing data
-    if (isNaN(maxGalleries) || isNaN(currentGalleries)) {
-      console.error('Invalid gallery limit data:', { maxGalleries, currentGalleries });
-      return false;
-    }
-
-    // -1 means unlimited
+    if (isNaN(maxGalleries) || isNaN(currentGalleries)) return false;
     if (maxGalleries === -1) return false;
-
-    console.log('Checking gallery limit:', maxGalleries, currentGalleries);
-    console.log('Is at gallery limit:', currentGalleries >= maxGalleries);
     return currentGalleries >= maxGalleries;
   }
 
   function isAtPhotoLimit() {
+    const userStats = authState.user?.stats;
     if (!userStats || !userStats.plan_limits) return false;
     const maxPhotos = parseInt(userStats.plan_limits.max_photos_count, 10);
     const currentPhotos = parseInt(userStats.photos_count || 0, 10);
@@ -213,28 +185,30 @@ const GalleryView = ({
   }
 
   function getGalleryUsageInfo() {
-    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    const userStats = authState.user?.stats;
+    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: 'rgb(59 130 246)', isAtLimit: false };
     const maxGalleries = parseInt(userStats.plan_limits.max_galleries_count, 10);
     const currentGalleries = parseInt(userStats.galleries_count || 0, 10);
-    if (isNaN(maxGalleries) || maxGalleries === -1) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    if (isNaN(maxGalleries) || maxGalleries === -1) return { percentage: 0, color: 'rgb(59 130 246)', isAtLimit: false };
     const percentage = (currentGalleries / maxGalleries) * 100;
     const isAtLimit = currentGalleries >= maxGalleries;
-    let color = '#10B981'; // green
-    if (percentage >= 100) color = '#EF4444'; // red
-    else if (percentage >= 80) color = '#F59E0B'; // yellow
+    let color = 'rgb(34 197 94)';
+    if (percentage >= 100) color = 'rgb(239 68 68)';
+    else if (percentage >= 80) color = 'rgb(245 158 11)';
     return { percentage, color, isAtLimit };
   }
 
   function getPhotoUsageInfo() {
-    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    const userStats = authState.user?.stats;
+    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: 'rgb(59 130 246)', isAtLimit: false };
     const maxPhotos = parseInt(userStats.plan_limits.max_photos_count, 10);
     const currentPhotos = parseInt(userStats.photos_count || 0, 10);
-    if (isNaN(maxPhotos) || maxPhotos === -1) return { percentage: 0, color: '#10B981', isAtLimit: false };
+    if (isNaN(maxPhotos) || maxPhotos === -1) return { percentage: 0, color: 'rgb(59 130 246)', isAtLimit: false };
     const percentage = (currentPhotos / maxPhotos) * 100;
     const isAtLimit = currentPhotos >= maxPhotos;
-    let color = '#10B981'; // green
-    if (percentage >= 100) color = '#EF4444'; // red
-    else if (percentage >= 80) color = '#F59E0B'; // yellow
+    let color = 'rgb(34 197 94)';
+    if (percentage >= 100) color = 'rgb(239 68 68)';
+    else if (percentage >= 80) color = 'rgb(245 158 11)';
     return { percentage, color, isAtLimit };
   }
 
@@ -243,22 +217,12 @@ const GalleryView = ({
     return isNaN(limit) ? '0' : limit.toLocaleString();
   };
 
-  const fetchGalleryDetails = async (galleryId) => {
-    try {
-      const response = await apiFetch(`/gallery/galleries/${galleryId}/`);
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
-      setPhotos(data.photos || []);
-      setSubGalleries(data.sub_galleries || []);
-    } catch (err) {
-      console.error("fetchGalleryDetails error:", err);
-      onError(err.message || "Failed to load gallery details");
-    }
-  };
-
   const fetchUserGalleries = async () => {
     try {
-      const response = await apiFetch(`/gallery/galleries/`);
+      const response = await apiFetchRef.current(`/gallery/galleries/`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       setUserGalleries(data || []);
@@ -302,7 +266,6 @@ const GalleryView = ({
       onError("You don't have permission to delete items.");
       return;
     }
-    if (selectedItems.size === 0) return;
     const confirmed = window.confirm(`Delete ${selectedItems.size} selected item(s)?`);
     if (!confirmed) return;
     try {
@@ -310,15 +273,15 @@ const GalleryView = ({
       selectedItems.forEach(itemId => {
         const [type, id] = itemId.split('-');
         if (type === 'photo') {
-          promises.push(apiFetch(`/gallery/photos/${id}/`, { method: "DELETE" }));
+          promises.push(apiFetchRef.current(`/gallery/photos/${id}/`, { method: "DELETE" }));
         } else if (type === 'gallery') {
-          promises.push(apiFetch(`/gallery/galleries/${id}/`, { method: "DELETE" }));
+          promises.push(apiFetchRef.current(`/gallery/galleries/${id}/`, { method: "DELETE" }));
         }
       });
       await Promise.all(promises);
       await fetchGalleryDetails(gallery.id);
-      await loadUserStats(); // Refresh stats after deletion
       clearSelection();
+      onError(`${selectedItems.size} item(s) deleted successfully!`, "success");
     } catch (err) {
       console.error("Bulk delete error:", err);
       onError("Failed to delete selected items");
@@ -326,20 +289,16 @@ const GalleryView = ({
   };
 
   const handleBulkMove = async (targetGalleryId) => {
-    if (!canEdit) {
-      onError("You don't have permission to move photos.");
-      return;
-    }
-    const photoIds = Array.from(selectedItems)
-      .filter(itemId => itemId.startsWith('photo-'))
-      .map(itemId => itemId.split('-')[1]);
-    if (photoIds.length === 0) {
-      onError("No photos selected to move.");
-      return;
-    }
     try {
+      const photoIds = Array.from(selectedItems)
+        .filter(itemId => itemId.startsWith('photo-'))
+        .map(itemId => itemId.split('-')[1]);
+      if (photoIds.length === 0) {
+        onError("No photos selected to move.");
+        return;
+      }
       await Promise.all(photoIds.map(photoId => 
-        apiFetch(`/gallery/photo/move/`, {
+        apiFetchRef.current(`/gallery/photo/move/`, {
           method: "POST",
           body: JSON.stringify({
             photo_id: photoId,
@@ -350,30 +309,10 @@ const GalleryView = ({
       await fetchGalleryDetails(gallery.id);
       clearSelection();
       setShowMoveModal(false);
+      onError(`${photoIds.length} photo${photoIds.length > 1 ? 's' : ''} moved successfully!`, "success");
     } catch (err) {
       console.error("Bulk move error:", err);
       onError(err.message || "Failed to move photos");
-    }
-  };
-
-  const handleMovePhoto = async (photoId, targetGalleryId) => {
-    if (!canEdit) {
-      onError("You don't have permission to move photos.");
-      return;
-    }
-    try {
-      const response = await apiFetch(`/gallery/photo/move/`, {
-        method: "POST",
-        body: JSON.stringify({
-          photo_id: photoId,
-          target_gallery_id: targetGalleryId,
-        }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      await fetchGalleryDetails(gallery.id);
-    } catch (err) {
-      console.error("movePhoto error:", err);
-      onError(err.message || "Failed to move photo");
     }
   };
 
@@ -384,84 +323,119 @@ const GalleryView = ({
     setShowMoveModal(true);
   };
 
-  // Enhanced drag handlers with proper event handling
   const handleDragStart = (e, photoId) => {
-    if (selectionMode || !canEdit) {
-      e.preventDefault();
-      return;
+    let photoIds = [photoId];
+    if (selectedItems.size > 0) {
+      photoIds = Array.from(selectedItems)
+        .filter(itemId => itemId.startsWith('photo-'))
+        .map(itemId => itemId.split('-')[1]);
+      if (!photoIds.includes(photoId)) {
+        photoIds = [photoId];
+      }
     }
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData("application/json", JSON.stringify({ photoId }));
-    setDraggedPhotoId(photoId);
+    e.dataTransfer.setData("application/json", JSON.stringify({ photoIds }));
+    setDraggedPhotoIds(photoIds);
+    document.body.style.cursor = 'grabbing';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedPhotoIds([]);
+    setDragOverGalleryId(null);
+    document.body.style.cursor = '';
   };
 
   const handleDragOver = (e, galleryId) => {
-    if (selectionMode || !canEdit || !draggedPhotoId) return;
+    if (galleryId === gallery.id) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    e.currentTarget.classList.add("border-blue-400", "bg-blue-500", "bg-opacity-20", "scale-105");
+    setDragOverGalleryId(galleryId);
   };
 
   const handleDragLeave = (e) => {
-    e.currentTarget.classList.remove("border-blue-400", "bg-blue-500", "bg-opacity-20", "scale-105");
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverGalleryId(null);
+    }
   };
 
   const handleDropOnGallery = async (e, targetGalleryId) => {
-    if (selectionMode || !canEdit || !draggedPhotoId) return;
+    if (targetGalleryId === gallery.id) return;
     e.preventDefault();
-    e.currentTarget.classList.remove("border-blue-400", "bg-blue-500", "bg-opacity-20", "scale-105");
+    setDragOverGalleryId(null);
     
     try {
       const data = JSON.parse(e.dataTransfer.getData("application/json"));
-      const photoId = data.photoId;
+      const photoIds = data.photoIds;
       
-      if (photoId && targetGalleryId !== gallery.id) {
-        await handleMovePhoto(photoId, targetGalleryId);
+      if (photoIds && photoIds.length > 0) {
+        await Promise.all(photoIds.map(photoId => 
+          apiFetchRef.current(`/gallery/photo/move/`, {
+            method: "POST",
+            body: JSON.stringify({
+              photo_id: photoId,
+              target_gallery_id: targetGalleryId,
+            }),
+          })
+        ));
+        await fetchGalleryDetails(gallery.id);
+        clearSelection();
+        onError(`${photoIds.length} photo${photoIds.length > 1 ? 's' : ''} moved successfully!`, "success");
       }
     } catch (error) {
       console.error("Error handling drop:", error);
+      onError("Failed to move photos");
     } finally {
-      setDraggedPhotoId(null);
+      handleDragEnd();
     }
   };
 
   const handleBackDragOver = (e) => {
-    if (selectionMode || !canEdit || !gallery.parent_gallery || !draggedPhotoId) return;
+    if (!gallery.parent_gallery) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setIsBackDragOver(true);
   };
 
   const handleBackDragLeave = (e) => {
-    // Only remove drag over state if we're actually leaving the element
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setIsBackDragOver(false);
     }
   };
 
   const handleBackDrop = async (e) => {
-    if (selectionMode || !canEdit || !gallery.parent_gallery || !draggedPhotoId) return;
+    if (!gallery.parent_gallery) return;
     e.preventDefault();
     setIsBackDragOver(false);
     
     try {
       const data = JSON.parse(e.dataTransfer.getData("application/json"));
-      const photoId = data.photoId;
+      const photoIds = data.photoIds;
       
-      if (photoId) {
-        await handleMovePhoto(photoId, gallery.parent_gallery);
+      if (photoIds && photoIds.length > 0) {
+        await Promise.all(photoIds.map(photoId => 
+          apiFetchRef.current(`/gallery/photo/move/`, {
+            method: "POST",
+            body: JSON.stringify({
+              photo_id: photoId,
+              target_gallery_id: gallery.parent_gallery,
+            }),
+          })
+        ));
+        await fetchGalleryDetails(gallery.id);
+        clearSelection();
+        onError(`${photoIds.length} photo${photoIds.length > 1 ? 's' : ''} moved to parent gallery!`, "success");
       }
     } catch (error) {
       console.error("Error handling back drop:", error);
+      onError("Failed to move photos to parent gallery");
     } finally {
-      setDraggedPhotoId(null);
+      handleDragEnd();
     }
   };
 
-  // Main drag and drop for upload
   const handleMainDragOver = (e) => {
     e.preventDefault();
-    if (canEdit && !isAtPhotoLimit()) {
+    if (!isAtPhotoLimit()) {
       setIsDragOver(true);
     }
   };
@@ -473,13 +447,13 @@ const GalleryView = ({
   };
 
   const handleAddGalleryToCollection = async () => {
-    if (!isAuthenticated) {
+    if (!authState.isAuthenticated) {
       alert("Please log in to add this gallery to your collection.");
       return;
     }
     setAddingToCollection(true);
     try {
-      const response = await apiFetch(`/gallery/add-to-collection/`, {
+      const response = await apiFetchRef.current(`/gallery/add-to-collection/`, {
         method: "POST",
         body: JSON.stringify({ gallery_id: gallery.id }),
       });
@@ -495,12 +469,12 @@ const GalleryView = ({
   };
 
   const handleAddPhotoToCollection = async (photo) => {
-    if (!isAuthenticated) {
+    if (!authState.isAuthenticated) {
       alert("Please log in to add this photo to your collection.");
       return;
     }
     try {
-      const response = await apiFetch(`/gallery/add-to-collection/`, {
+      const response = await apiFetchRef.current(`/gallery/add-to-collection/`, {
         method: "POST",
         body: JSON.stringify({ photo_id: photo.id }),
       });
@@ -519,8 +493,7 @@ const GalleryView = ({
     }
     
     if (isAtGalleryLimit()) {
-      console.log('Gallery limit reached, navigating to /upgrade');
-      onError(`You've reached your plan's limit of ${formatLimit(userStats?.plan_limits?.max_galleries_count || 0)} galleries. Please upgrade your plan.`);
+      onError(`You've reached your plan's limit of ${formatLimit(authState.user?.stats?.plan_limits?.max_galleries_count || 0)} galleries. Please upgrade your plan.`);
       navigate('/upgrade');
       return;
     }
@@ -536,7 +509,7 @@ const GalleryView = ({
         description: "",
         parent_gallery: gallery.id
       };
-      const response = await apiFetch(`/gallery/galleries/create/`, {
+      const response = await apiFetchRef.current(`/gallery/galleries/create/`, {
         method: "POST",
         body: JSON.stringify(requestBody),
       });
@@ -548,7 +521,7 @@ const GalleryView = ({
       setSubGalleries((prev) => [normalizeGallery(data), ...prev]);
       setNewGalleryTitle("");
       setShowCreateForm(false);
-      await loadUserStats(); // Refresh stats after creation
+      onError(`Sub-gallery "${newGalleryTitle}" created successfully!`, "success");
     } catch (err) {
       console.error("createSubGallery error:", err);
       onError(err.message || "Failed to create sub-gallery");
@@ -567,8 +540,7 @@ const GalleryView = ({
     }
     
     if (isAtPhotoLimit()) {
-      console.log('Photo limit reached, navigating to /upgrade');
-      onError(`You've reached your plan's limit of ${formatLimit(userStats?.plan_limits?.max_photos_count || 0)} photos. Please upgrade your plan.`);
+      onError(`You've reached your plan's limit of ${formatLimit(authState.user?.stats?.plan_limits?.max_photos_count || 0)} photos. Please upgrade your plan.`);
       navigate('/upgrade');
       return;
     }
@@ -585,8 +557,7 @@ const GalleryView = ({
     }
     
     if (isAtPhotoLimit()) {
-      console.log('Photo limit reached, navigating to /upgrade');
-      onError(`You've reached your plan's limit of ${formatLimit(userStats?.plan_limits?.max_photos_count || 0)} photos. Please upgrade your plan.`);
+      onError(`You've reached your plan's limit of ${formatLimit(authState.user?.stats?.plan_limits?.max_photos_count || 0)} photos. Please upgrade your plan.`);
       navigate('/upgrade');
       return;
     }
@@ -604,13 +575,13 @@ const GalleryView = ({
         formData.append("image", file);
         formData.append("gallery", gallery.id);
       }
-      const response = await apiFetch(`/gallery/photos/`, {
+      const response = await apiFetchRef.current(`/gallery/photos/`, {
         method: "POST",
         body: formData,
       });
       if (!response.ok) throw new Error(await response.text());
       await fetchGalleryDetails(gallery.id);
-      await loadUserStats(); // Refresh stats after upload
+      onError(`${files.length} photo${files.length > 1 ? 's' : ''} uploaded successfully!`, "success");
     } catch (err) {
       console.error("uploadPhotos error:", err);
       onError(err.message || "Failed to upload photos");
@@ -626,7 +597,7 @@ const GalleryView = ({
       return;
     }
     try {
-      const response = await apiFetch(`/gallery/photos/${photo.id}/`, {
+      const response = await apiFetchRef.current(`/gallery/photos/${photo.id}/`, {
         method: "PATCH",
         body: JSON.stringify({ caption: newCaption }),
       });
@@ -647,12 +618,11 @@ const GalleryView = ({
       return;
     }
     try {
-      const response = await apiFetch(`/gallery/photos/${photo.id}/`, {
+      const response = await apiFetchRef.current(`/gallery/photos/${photo.id}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete photo");
       setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
-      await loadUserStats(); // Refresh stats after deletion
     } catch (err) {
       console.error("deletePhoto error:", err);
       onError(err.message || "Failed to delete photo");
@@ -671,7 +641,7 @@ const GalleryView = ({
       return;
     }
     try {
-      const response = await apiFetch(`/gallery/galleries/${subGallery.id}/`, {
+      const response = await apiFetchRef.current(`/gallery/galleries/${subGallery.id}/`, {
         method: "PATCH",
         body: JSON.stringify({ title: newTitle }),
       });
@@ -692,15 +662,20 @@ const GalleryView = ({
       return;
     }
     try {
-      const response = await apiFetch(`/gallery/galleries/${subGallery.id}/`, {
+      const response = await apiFetchRef.current(`/gallery/galleries/${subGallery.id}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete sub-gallery");
       setSubGalleries((prev) => prev.filter((sg) => sg.id !== subGallery.id));
-      await loadUserStats(); // Refresh stats after deletion
     } catch (err) {
       console.error(err);
       onError(err.message || "Failed to delete sub-gallery");
+    }
+  };
+
+  const handleSubGalleryCreated = async (parentGalleryId, newSubGallery) => {
+    if (parentGalleryId === gallery.id) {
+      setSubGalleries((prev) => [normalizeGallery(newSubGallery), ...prev]);
     }
   };
 
@@ -717,23 +692,23 @@ const GalleryView = ({
       switch (gallery.access_type) {
         case 'assigned':
           return (
-            <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 border border-blue-400/50 rounded-full backdrop-blur-sm">
-              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-              <span className="text-blue-200 text-sm font-medium">Assigned</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-full text-blue-700 dark:text-blue-200 text-sm font-medium">
+              <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-pulse"></div>
+              Assigned
             </div>
           );
         case 'shared':
           return (
-            <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/20 border border-emerald-400/50 rounded-full backdrop-blur-sm">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-emerald-200 text-sm font-medium">Shared</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full text-emerald-700 dark:text-emerald-200 text-sm font-medium">
+              <div className="w-2 h-2 bg-emerald-500 dark:bg-emerald-400 rounded-full animate-pulse"></div>
+              Shared
             </div>
           );
         case 'public':
           return (
-            <div className="flex items-center gap-2 px-3 py-1 bg-purple-500/20 border border-purple-400/50 rounded-full backdrop-blur-sm">
-              <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-              <span className="text-purple-200 text-sm font-medium">Public</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-full text-purple-700 dark:text-purple-200 text-sm font-medium">
+              <div className="w-2 h-2 bg-purple-500 dark:bg-purple-400 rounded-full animate-pulse"></div>
+              Public
             </div>
           );
         default:
@@ -756,12 +731,46 @@ const GalleryView = ({
 
   const selectedPhotoCount = Array.from(selectedItems).filter(id => id.startsWith('photo-')).length;
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'a') {
+          e.preventDefault();
+          selectAll();
+        }
+      }
+      if (e.key === 'Delete' && selectionMode && canEdit) {
+        e.preventDefault();
+        handleBulkDelete();
+      }
+      if (e.key === 'Escape') {
+        if (selectionMode) {
+          clearSelection();
+        }
+        if (showCreateForm) {
+          setShowCreateForm(false);
+        }
+        if (showMoveModal) {
+          setShowMoveModal(false);
+        }
+        if (showFilters) {
+          setShowFilters(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectionMode, canEdit, showCreateForm, showMoveModal, showFilters]);
+
   if (selectedSubGallery) {
     return (
       <GalleryView
         gallery={selectedSubGallery}
         onBack={handleBackFromSubGallery}
         onError={onError}
+        theme={theme}
       />
     );
   }
@@ -771,24 +780,62 @@ const GalleryView = ({
   const photoUsage = getPhotoUsageInfo();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div 
+      className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'} transition-colors duration-300`}
+      onDragOver={handleMainDragOver}
+      onDragLeave={handleMainDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Floating Action Button for Create Sub-Gallery */}
+      {canEdit && (
+        <button
+          onClick={() => setShowCreateForm(true)}
+          disabled={isAtGalleryLimit()}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
+          title={isAtGalleryLimit() ? "Gallery limit reached" : "Create Sub-Gallery"}
+        >
+          <FolderPlus className="w-6 h-6 group-hover:scale-110 transition-transform" />
+        </button>
+      )}
+
+      {/* Drag Indicator */}
+      {draggedPhotoIds.length > 0 && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce">
+          <div className="flex items-center gap-2">
+            <Move className="w-5 h-5" />
+            <span className="font-semibold">Moving {draggedPhotoIds.length} photo{draggedPhotoIds.length > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Drop Zone Overlay */}
+      {isDragOver && (
+        <div className="fixed inset-0 bg-indigo-500/20 backdrop-blur-sm z-40 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-2xl border-2 border-dashed border-indigo-500 animate-pulse">
+            <Upload className="w-12 h-12 text-indigo-500 mx-auto mb-4" />
+            <p className="text-lg font-semibold text-gray-900 dark:text-white">Drop photos here to upload</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-xl bg-slate-900/80 border-b border-slate-700/50">
-        <div className="px-4 py-4">
-          {/* Top Row */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+      <div className={`sticky top-0 z-30 ${theme === 'dark' ? 'bg-gray-900/95' : 'bg-white/95'} backdrop-blur-xl border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'} shadow-sm`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {/* Top Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
               <button
-                className={`group flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/50 text-slate-200 transition-all duration-200 backdrop-blur-sm ${isBackDragOver ? 'border-blue-400 bg-blue-500/20 scale-105' : ''}`}
+                className={`group flex items-center gap-3 px-4 py-2.5 rounded-xl ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'} transition-all duration-300 shadow-sm hover:shadow-md transform hover:-translate-y-0.5 ${isBackDragOver ? 'ring-2 ring-indigo-500 bg-indigo-500/20' : ''}`}
                 onClick={onBack}
                 onDragOver={handleBackDragOver}
                 onDragLeave={handleBackDragLeave}
                 onDrop={handleBackDrop}
+                title={gallery.parent_gallery ? "Move to Parent Gallery" : "Back to Galleries"}
               >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-                <span className="font-medium">Back</span>
+                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                <span className="font-semibold">Back</span>
                 {isBackDragOver && (
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-ping"></div>
                 )}
               </button>
               
@@ -796,30 +843,30 @@ const GalleryView = ({
                 <button
                   onClick={handleAddGalleryToCollection}
                   disabled={addingToCollection}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600/80 hover:bg-emerald-500/80 text-white font-medium transition-all duration-200 disabled:opacity-50 backdrop-blur-sm border border-emerald-400/50"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-semibold transition-all duration-300 shadow-sm hover:shadow-md transform hover:-translate-y-0.5 disabled:opacity-50"
                 >
                   {addingToCollection ? (
-                    <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
+                    <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></div>
                   ) : (
-                    <Heart className="w-4 h-4" />
+                    <Heart className="w-5 h-5" />
                   )}
-                  Add to Collection
+                  <span className="hidden sm:inline">Add to Collection</span>
                 </button>
               )}
             </div>
 
             {/* Plan Usage Indicators */}
-            {isAuthenticated && canEdit && userStats?.plan_limits && (
-              <div className="hidden md:flex items-center gap-4 text-xs">
-                {userStats.plan_limits.max_galleries_count !== -1 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/60 rounded-full backdrop-blur-sm border border-slate-600/50">
-                    <Folder className="w-3 h-3 text-slate-400" />
-                    <span className="text-slate-300">
-                      {userStats.galleries_count || 0} / {formatLimit(userStats.plan_limits.max_galleries_count)}
+            {authState.isAuthenticated && canEdit && authState.user?.stats?.plan_limits && (
+              <div className="hidden lg:flex items-center gap-4">
+                {authState.user.stats.plan_limits.max_galleries_count !== -1 && (
+                  <div className={`flex items-center gap-3 px-4 py-2 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl shadow-sm`}>
+                    <Folder className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {authState.user.stats.galleries_count || 0} / {formatLimit(authState.user.stats.plan_limits.max_galleries_count)}
                     </span>
-                    <div className="w-8 bg-slate-700 rounded-full h-1.5">
+                    <div className="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div
-                        className="h-1.5 rounded-full transition-all duration-300"
+                        className="h-2 rounded-full transition-all duration-500"
                         style={{
                           width: `${Math.min(galleryUsage.percentage, 100)}%`,
                           backgroundColor: galleryUsage.color,
@@ -828,15 +875,15 @@ const GalleryView = ({
                     </div>
                   </div>
                 )}
-                {userStats.plan_limits.max_photos_count !== -1 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/60 rounded-full backdrop-blur-sm border border-slate-600/50">
-                    <Image className="w-3 h-3 text-slate-400" />
-                    <span className="text-slate-300">
-                      {userStats.photos_count || 0} / {formatLimit(userStats.plan_limits.max_photos_count)}
+                {authState.user.stats.plan_limits.max_photos_count !== -1 && (
+                  <div className={`flex items-center gap-3 px-4 py-2 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl shadow-sm`}>
+                    <Image className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {authState.user.stats.photos_count || 0} / {formatLimit(authState.user.stats.plan_limits.max_photos_count)}
                     </span>
-                    <div className="w-8 bg-slate-700 rounded-full h-1.5">
+                    <div className="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div
-                        className="h-1.5 rounded-full transition-all duration-300"
+                        className="h-2 rounded-full transition-all duration-500"
                         style={{
                           width: `${Math.min(photoUsage.percentage, 100)}%`,
                           backgroundColor: photoUsage.color,
@@ -850,20 +897,20 @@ const GalleryView = ({
           </div>
 
           {/* Gallery Title and Info */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h1 className={`text-3xl lg:text-4xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-3`}>
                 {gallery.title}
               </h1>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 text-slate-400 text-sm">
-                  <Image className="w-4 h-4" />
-                  <span>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                  <Image className="w-5 h-5" />
+                  <span className="font-medium">{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
                 </div>
                 {subGalleries.length > 0 && (
-                  <div className="flex items-center gap-2 text-slate-400 text-sm">
-                    <Folder className="w-4 h-4" />
-                    <span>{subGalleries.length} galler{subGalleries.length !== 1 ? 'ies' : 'y'}</span>
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Folder className="w-5 h-5" />
+                    <span className="font-medium">{subGalleries.length} galler{subGalleries.length !== 1 ? 'ies' : 'y'}</span>
                   </div>
                 )}
                 {getAccessTypeDisplay()}
@@ -874,331 +921,319 @@ const GalleryView = ({
       </div>
 
       {/* Plan Limit Warnings */}
-      {isAuthenticated && canEdit && userStats && (
-        <div className="px-4 py-2 space-y-2">
-          {isAtGalleryLimit() && (
-            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 backdrop-blur-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-full">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-amber-200 font-semibold">Gallery limit reached</p>
-                  <p className="text-amber-300/80 text-sm mt-1">
-                    You've reached your plan's limit of {formatLimit(userStats.plan_limits.max_galleries_count)} galleries.{' '}
+      {authState.isAuthenticated && canEdit && authState.user?.stats && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {(isAtGalleryLimit() || isAtPhotoLimit()) && (
+            <div className="space-y-3">
+              {isAtGalleryLimit() && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-amber-100 dark:bg-amber-800/50 rounded-xl">
+                      <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-800 dark:text-amber-200 mb-1">Gallery Limit Reached</h3>
+                      <p className="text-amber-700 dark:text-amber-300 text-sm">
+                        You've reached your plan's limit of {formatLimit(authState.user.stats.plan_limits.max_galleries_count)} galleries.
+                      </p>
+                    </div>
                     <button
                       onClick={() => navigate('/upgrade')}
-                      className="underline hover:no-underline font-medium text-amber-200 hover:text-white transition-colors"
+                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg font-medium text-sm transition-all duration-300 shadow-sm hover:shadow-md"
                     >
-                      Upgrade your plan
+                      Upgrade Plan
                     </button>
-                  </p>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-          {isAtPhotoLimit() && (
-            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 backdrop-blur-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-full">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-amber-200 font-semibold">Photo limit reached</p>
-                  <p className="text-amber-300/80 text-sm mt-1">
-                    You've reached your plan's limit of {formatLimit(userStats.plan_limits.max_photos_count)} photos.{' '}
+              )}
+              {isAtPhotoLimit() && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-amber-100 dark:bg-amber-800/50 rounded-xl">
+                      <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-800 dark:text-amber-200 mb-1">Photo Limit Reached</h3>
+                      <p className="text-amber-700 dark:text-amber-300 text-sm">
+                        You've reached your plan's limit of {formatLimit(authState.user.stats.plan_limits.max_photos_count)} photos.
+                      </p>
+                    </div>
                     <button
                       onClick={() => navigate('/upgrade')}
-                      className="underline hover:no-underline font-medium text-amber-200 hover:text-white transition-colors"
+                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg font-medium text-sm transition-all duration-300 shadow-sm hover:shadow-md"
                     >
-                      Upgrade your plan
+                      Upgrade Plan
                     </button>
-                  </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* Search and Controls */}
-      <div className="px-4 py-4 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col lg:flex-row gap-4 mb-6">
           {/* Search Bar */}
           <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Search photos and galleries..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-800/60 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all duration-200 backdrop-blur-sm"
+              className={`w-full pl-12 pr-4 py-3.5 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-xl placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300 shadow-sm`}
             />
           </div>
 
-          {/* View Toggle */}
-          <div className="flex rounded-xl overflow-hidden bg-slate-800/60 border border-slate-600/50 backdrop-blur-sm">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-4 py-3 transition-all duration-200 ${viewMode === 'grid' 
-                ? 'bg-blue-500/80 text-white shadow-lg' 
-                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-              }`}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-4 py-3 transition-all duration-200 ${viewMode === 'list' 
-                ? 'bg-blue-500/80 text-white shadow-lg' 
-                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-              }`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Control Buttons */}
+          <div className="flex items-center gap-3">
+            {/* View Mode Toggle */}
+            <div className={`flex rounded-xl overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} shadow-sm`}>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-4 py-3.5 flex items-center gap-2 font-medium text-sm transition-all duration-300 ${viewMode === 'grid' ? 'bg-indigo-600 text-white shadow-sm' : theme === 'dark' ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+              >
+                <Grid3X3 className="w-5 h-5" />
+                <span className="hidden sm:inline">Grid</span>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-3.5 flex items-center gap-2 font-medium text-sm transition-all duration-300 ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-sm' : theme === 'dark' ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+              >
+                <List className="w-5 h-5" />
+                <span className="hidden sm:inline">List</span>
+              </button>
+            </div>
 
-          {/* More Options */}
-          <button
-            onClick={() => setShowToolbar(!showToolbar)}
-            className="px-4 py-3 bg-slate-800/60 border border-slate-600/50 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all duration-200 backdrop-blur-sm"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-        </div>
+            {/* Filter Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-3.5 ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-white hover:bg-gray-50 text-gray-900'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'} rounded-xl font-medium text-sm transition-all duration-300 shadow-sm ${showFilters ? 'ring-2 ring-indigo-500' : ''}`}
+              >
+                <Filter className="w-5 h-5" />
+                <span className="hidden sm:inline">Filter</span>
+              </button>
 
-        {/* Extended Toolbar */}
-        {showToolbar && (
-          <div className="bg-slate-800/40 rounded-xl p-4 backdrop-blur-sm border border-slate-700/50">
-            <div className="flex flex-col sm:flex-row gap-4">
-              {/* Sort and Filter */}
-              <div className="flex flex-col sm:flex-row gap-3 flex-1">
-                <div className="flex items-center gap-2">
-                  <SortAsc className="w-4 h-4 text-slate-400" />
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="px-3 py-2 bg-slate-700/60 border border-slate-600/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 backdrop-blur-sm"
-                  >
-                    <option value="date_desc">Newest first</option>
-                    <option value="date_asc">Oldest first</option>
-                    <option value="name_asc">Name A-Z</option>
-                    <option value="name_desc">Name Z-A</option>
-                    <option value="size_desc">Largest first</option>
-                    <option value="size_asc">Smallest first</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-slate-400" />
-                  <select
-                    value={filterBy}
-                    onChange={(e) => setFilterBy(e.target.value)}
-                    className="px-3 py-2 bg-slate-700/60 border border-slate-600/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 backdrop-blur-sm"
-                  >
-                    <option value="all">All items</option>
-                    <option value="photos">Photos only</option>
-                    <option value="galleries">Galleries only</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              {canEdit && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowCreateForm(!showCreateForm)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-500/80 text-white rounded-lg transition-all duration-200 disabled:opacity-50 backdrop-blur-sm border border-blue-400/50"
-                    disabled={isAtGalleryLimit()}
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Gallery</span>
-                  </button>
-                  
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    disabled={isAtPhotoLimit()}
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-500/80 text-white rounded-lg transition-all duration-200 disabled:opacity-50 backdrop-blur-sm border border-emerald-400/50"
-                    disabled={isAtPhotoLimit()}
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span className="hidden sm:inline">Upload</span>
-                  </button>
+              {/* Filter Dropdown */}
+              {showFilters && (
+                <div className={`absolute right-0 mt-2 w-80 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 p-6`}>
+                  <div className="space-y-6">
+                    <div>
+                      <label className={`block text-sm font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'} mb-3`}>
+                        <SortAsc className="w-4 h-4 inline mr-2" />
+                        Sort By
+                      </label>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className={`w-full px-3 py-2.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium`}
+                      >
+                        <option value="date_desc">Newest First</option>
+                        <option value="date_asc">Oldest First</option>
+                        <option value="name_asc">Name (A-Z)</option>
+                        <option value="name_desc">Name (Z-A)</option>
+                        <option value="size_asc">Size (Smallest)</option>
+                        <option value="size_desc">Size (Largest)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'} mb-3`}>
+                        <Filter className="w-4 h-4 inline mr-2" />
+                        Show Items
+                      </label>
+                      <select
+                        value={filterBy}
+                        onChange={(e) => setFilterBy(e.target.value)}
+                        className={`w-full px-3 py-2.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium`}
+                      >
+                        <option value="all">All Items</option>
+                        <option value="photos">Photos Only</option>
+                        <option value="galleries">Galleries Only</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => setShowFilters(false)}
+                      className="w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-all duration-300"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Selection Actions */}
-            {selectionMode && (
-              <div className="mt-4 pt-4 border-t border-slate-700/50">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={selectAll}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-700/60 hover:bg-slate-600/60 text-white rounded-lg text-sm transition-all duration-200"
-                  >
-                    <Check className="w-3 h-3" />
-                    All
-                  </button>
-                  <button
-                    onClick={clearSelection}
-                    className="px-3 py-1.5 bg-slate-700/60 hover:bg-slate-600/60 text-white rounded-lg text-sm transition-all duration-200"
-                  >
-                    Clear ({selectedItems.size})
-                  </button>
-                  {canEdit && (
-                    <>
-                      <button
-                        onClick={handleBulkDelete}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-red-600/80 hover:bg-red-500/80 text-white rounded-lg text-sm transition-all duration-200"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Delete
-                      </button>
-                      {selectedPhotoCount > 0 && (
-                        <button
-                          onClick={handleOpenMoveModal}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500/80 text-white rounded-lg text-sm transition-all duration-200"
-                        >
-                          <Move className="w-3 h-3" />
-                          Move ({selectedPhotoCount})
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* Upload Button */}
+            {canEdit && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || isAtPhotoLimit()}
+                className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-medium text-sm transition-all duration-300 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></div>
+                ) : (
+                  <Upload className="w-5 h-5" />
+                )}
+                <span className="hidden sm:inline">Upload</span>
+              </button>
             )}
           </div>
-        )}
+        </div>
 
-        {/* Create Gallery Form */}
-        {showCreateForm && (
-          <div className="bg-slate-800/40 rounded-xl p-4 backdrop-blur-sm border border-slate-700/50">
+        {/* Selection Controls */}
+        {selectionMode && (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 mb-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span className="font-semibold text-indigo-900 dark:text-indigo-100">
+                  {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={selectAll}
+                  className="flex items-center gap-2 px-3 py-2 bg-indigo-100 dark:bg-indigo-800 hover:bg-indigo-200 dark:hover:bg-indigo-700 text-indigo-800 dark:text-indigo-200 rounded-lg font-medium text-sm transition-all"
+                >
+                  <Check className="w-4 h-4" />
+                  Select All
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg font-medium text-sm transition-all"
+                >
+                  <X className="w-4 h-4" />
+                  Clear
+                </button>
+              </div>
+
+              {canEdit && (
+                <div className="flex items-center gap-2 ml-auto">
+                  {selectedPhotoCount > 0 && (
+                    <button
+                      onClick={handleOpenMoveModal}
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-all"
+                    >
+                      <Move className="w-4 h-4" />
+                      Move ({selectedPhotoCount})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete ({selectedItems.size})
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Create Sub-Gallery Form */}
+      {showCreateForm && canEdit && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+          <div className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-6 shadow-lg`}>
+            <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-4`}>
+              Create New Sub-Gallery
+            </h3>
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
-                placeholder="Gallery name..."
+                placeholder="Enter sub-gallery title..."
                 value={newGalleryTitle}
                 onChange={(e) => setNewGalleryTitle(e.target.value)}
-                className="flex-1 px-4 py-3 bg-slate-700/60 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-200"
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateSubGallery()}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newGalleryTitle.trim() && !creating) {
+                    handleCreateSubGallery();
+                  }
+                }}
+                className={`flex-1 px-4 py-3 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium`}
+                autoFocus
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleCreateSubGallery}
-                  disabled={creating || isAtGalleryLimit() || !newGalleryTitle.trim()}
-                  className="px-6 py-3 bg-blue-600/80 hover:bg-blue-500/80 text-white rounded-xl transition-all duration-200 disabled:opacity-50 font-medium"
+                  disabled={creating || !newGalleryTitle.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {creating ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
-                      Creating...
-                    </div>
+                    <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></div>
                   ) : (
                     'Create'
                   )}
                 </button>
                 <button
                   onClick={() => setShowCreateForm(false)}
-                  className="px-6 py-3 bg-slate-600/60 hover:bg-slate-500/60 text-white rounded-xl transition-all duration-200"
+                  className={`px-6 py-3 ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-900'} rounded-lg font-medium transition-all duration-300`}
                 >
                   Cancel
                 </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main Content */}
-      <div className="px-4 pb-8">
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleMainDragOver}
-          onDragLeave={handleMainDragLeave}
-          className={`relative min-h-[400px] rounded-2xl border-2 border-dashed transition-all duration-300 ${
-            isDragOver 
-              ? 'border-blue-400 bg-blue-500/10 scale-[1.02]' 
-              : 'border-slate-700/50 hover:border-slate-600/50'
-          }`}
-        >
-          {/* Drag Overlay */}
-          {isDragOver && (
-            <div className="absolute inset-0 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm rounded-2xl z-10">
-              <div className="text-center">
-                <Upload className="w-12 h-12 text-blue-400 mx-auto mb-4 animate-bounce" />
-                <p className="text-blue-200 text-lg font-semibold">Drop photos to upload</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        {displayItems.length === 0 ? (
+          <div className="text-center py-16">
+            <div className={`w-24 h-24 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} rounded-2xl mx-auto mb-6 flex items-center justify-center`}>
+              <Folder className="w-12 h-12 text-gray-400" />
+            </div>
+            <h3 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-2`}>
+              {searchQuery ? 'No results found' : 'This gallery is empty'}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              {searchQuery 
+                ? 'Try adjusting your search terms or filters.' 
+                : canEdit 
+                  ? 'Start by uploading some photos or creating sub-galleries.'
+                  : 'There are no items to display in this gallery.'
+              }
+            </p>
+            {canEdit && !searchQuery && (
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isAtPhotoLimit()}
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-medium transition-all duration-300 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Upload Photos
+                </button>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  disabled={isAtGalleryLimit()}
+                  className={`px-6 py-3 ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700' : 'bg-white hover:bg-gray-50 text-gray-900 border-gray-300'} border rounded-xl font-medium transition-all duration-300 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  Create Sub-Gallery
+                </button>
               </div>
-            </div>
-          )}
-
-          {statsLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-            </div>
-          ) : displayItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center p-8">
-              <div className="w-16 h-16 bg-slate-800/60 rounded-full flex items-center justify-center mb-4">
-                {searchQuery ? (
-                  <Search className="w-8 h-8 text-slate-400" />
-                ) : (
-                  <Image className="w-8 h-8 text-slate-400" />
-                )}
-              </div>
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                {searchQuery ? 'No results found' : 'No content yet'}
-              </h3>
-              <p className="text-slate-500 mb-4">
-                {searchQuery 
-                  ? 'Try adjusting your search terms'
-                  : 'Start by uploading photos or creating galleries'
-                }
-              </p>
-              {canEdit && !searchQuery && (
-                <div className="flex gap-3">
-                  {!isAtPhotoLimit() && (
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-500/80 text-white rounded-lg transition-all duration-200"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upload Photos
-                    </button>
-                  )}
-                  {!isAtGalleryLimit() && (
-                    <button
-                      onClick={() => setShowCreateForm(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-500/80 text-white rounded-lg transition-all duration-200"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create Gallery
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className={
-              viewMode === 'grid' 
-                ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4'
-                : 'space-y-3 p-4'
-            }>
-              {displayItems.map(item => (
-                item.type === 'gallery' ? (
+            )}
+          </div>
+        ) : (
+          <div className={`grid gap-6 ${
+            viewMode === 'grid' 
+              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' 
+              : 'grid-cols-1'
+          }`}>
+            {displayItems.map((item) => (
+              <div key={`${item.type}-${item.id}`} className="group">
+                {item.type === 'gallery' ? (
                   <GalleryCard
-                    key={item.id}
                     gallery={item}
-                    onSelect={() => handleSelectSubGallery(item)}
+                    onClick={() => handleSelectSubGallery(item)}
                     onEdit={handleSubGalleryEdit}
                     onDelete={handleSubGalleryDelete}
+                    onAddPhotos={() => fileInputRef.current?.click()}
+                    onSubGalleryCreated={handleSubGalleryCreated}
                     canEdit={canEdit}
                     isSelected={selectedItems.has(`gallery-${item.id}`)}
                     onToggleSelection={() => toggleSelection(item.id, 'gallery')}
@@ -1206,10 +1241,11 @@ const GalleryView = ({
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDropOnGallery(e, item.id)}
                     viewMode={viewMode}
+                    theme={theme}
+                    isDraggedOver={dragOverGalleryId === item.id}
                   />
                 ) : (
                   <PhotoCard
-                    key={item.id}
                     photo={item}
                     onRename={handlePhotoRename}
                     onDelete={handlePhotoDelete}
@@ -1219,47 +1255,84 @@ const GalleryView = ({
                     isSelected={selectedItems.has(`photo-${item.id}`)}
                     onToggleSelection={() => toggleSelection(item.id, 'photo')}
                     onDragStart={(e) => handleDragStart(e, item.id)}
-                    isDragging={draggedPhotoId === item.id}
+                    onDragEnd={handleDragEnd}
                     viewMode={viewMode}
+                    theme={theme}
                   />
-                )
-              ))}
-            </div>
-          )}
-        </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept="image/*"
+        multiple
+        className="hidden"
+      />
 
       {/* Move Modal */}
       {showMoveModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800/90 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md border border-slate-700/50 shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Move className="w-5 h-5" />
-              Move Photos
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">
-              Select a destination gallery for {selectedPhotoCount} photo{selectedPhotoCount !== 1 ? 's' : ''}
-            </p>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {userGalleries
-                .filter(g => g.id !== gallery.id)
-                .map(g => (
-                  <button
-                    key={g.id}
-                    onClick={() => handleBulkMove(g.id)}
-                    className="w-full text-left px-4 py-3 bg-slate-700/60 hover:bg-slate-600/60 rounded-xl text-white transition-all duration-200 border border-slate-600/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Folder className="w-4 h-4 text-slate-400" />
-                      <span className="font-medium">{g.title}</span>
-                    </div>
-                  </button>
-                ))}
+          <div className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl w-full max-w-md border shadow-2xl transform transition-all duration-300`}>
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h3 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  Move Photos
+                </h3>
+                <button
+                  onClick={() => setShowMoveModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                Select a destination gallery for {selectedPhotoCount} photo{selectedPhotoCount !== 1 ? 's' : ''}
+              </p>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
+            
+            <div className="p-6">
+              <div className="max-h-80 overflow-y-auto space-y-2">
+                {userGalleries
+                  .filter(g => g.id !== gallery.id && g.can_share !== false)
+                  .map(targetGallery => (
+                    <button
+                      key={targetGallery.id}
+                      onClick={() => handleBulkMove(targetGallery.id)}
+                      className={`w-full flex items-center gap-4 px-4 py-3 ${theme === 'dark' ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-50 text-gray-900'} rounded-xl transition-all duration-300 text-left group`}
+                    >
+                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/50 transition-colors">
+                        <Folder className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium">{targetGallery.title}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {targetGallery.photos_count || 0} photos
+                        </p>
+                      </div>
+                      <ArrowLeft className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 rotate-180 transition-colors" />
+                    </button>
+                  ))}
+              </div>
+              
+              {userGalleries.filter(g => g.id !== gallery.id && g.can_share !== false).length === 0 && (
+                <div className="text-center py-8">
+                  <Folder className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 dark:text-gray-400">No available galleries to move photos to.</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setShowMoveModal(false)}
-                className="px-4 py-2 bg-slate-600/60 hover:bg-slate-500/60 text-white rounded-xl transition-all duration-200"
+                className="w-full py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl font-medium transition-all duration-300"
               >
                 Cancel
               </button>
@@ -1268,14 +1341,49 @@ const GalleryView = ({
         </div>
       )}
 
-      {/* Upload Progress */}
-      {uploading && (
-        <div className="fixed bottom-6 right-6 bg-slate-800/90 backdrop-blur-xl text-white p-4 rounded-2xl shadow-2xl border border-slate-700/50 z-50">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
-            <span className="font-medium">Uploading photos...</span>
+      {/* Upload Drop Zone (when dragging files) */}
+      {canEdit && !isAtPhotoLimit() && (
+        <div 
+          className={`fixed inset-x-0 bottom-0 h-32 bg-gradient-to-t from-indigo-500/20 to-transparent pointer-events-none transition-opacity duration-300 ${isDragOver ? 'opacity-100' : 'opacity-0'}`}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                <span className="font-semibold">Drop to upload photos</span>
+              </div>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Keyboard Shortcuts Help */}
+      {selectionMode && (
+        <div className="fixed bottom-6 left-6 bg-gray-900/90 text-white px-4 py-2 rounded-lg text-sm backdrop-blur-sm z-40">
+          <div className="flex items-center gap-4">
+            <span className="font-medium">Shortcuts:</span>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 bg-gray-700 rounded text-xs font-mono">Ctrl+A</kbd>
+              <span className="text-gray-300 text-xs">Select All</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 bg-gray-700 rounded text-xs font-mono">Del</kbd>
+              <span className="text-gray-300 text-xs">Delete</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 bg-gray-700 rounded text-xs font-mono">Esc</kbd>
+              <span className="text-gray-300 text-xs">Clear</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Click outside to close filter dropdown */}
+      {showFilters && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowFilters(false)}
+        />
       )}
     </div>
   );

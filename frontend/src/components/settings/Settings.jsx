@@ -16,6 +16,7 @@ import BrandingSettingsTab from "./BrandingSettingsTab";
 import GallerySettingsTab from "./GallerySettingsTab";
 import NotificationSettingsTab from "./NotificationSettingsTab";
 import AccountSettingsTab from "./AccountSettingsTab";
+import UsageComponent from "./UsageComponent";
 
 
 export default function Settings() {
@@ -25,7 +26,8 @@ export default function Settings() {
   const tabs = [
     { id: "booking", label: "Booking Settings", icon: Calendar, color: "from-blue-500 to-cyan-500" },
     { id: "payment", label: "Payment Settings", icon: CreditCard, color: "from-green-500 to-emerald-500" },
-    { id: "branding", label: "Branding", icon: Palette, color: "from-purple-500 to-pink-500" },
+    // { id: "branding", label: "Branding", icon: Palette, color: "from-purple-500 to-pink-500" },
+    { id: "usage", label: "Usage", icon: CreditCard, color: "from-teal-500 to-cyan-500" },
     { id: "gallery", label: "Gallery Settings", icon: Image, color: "from-orange-500 to-red-500" },
     { id: "notifications", label: "Notifications", icon: Bell, color: "from-yellow-500 to-orange-500" },
     { id: "account", label: "Account Settings", icon: User, color: "from-indigo-500 to-purple-500" }
@@ -35,8 +37,9 @@ export default function Settings() {
     switch (activeTab) {
       case "booking": return <BookingSettingsTab />;
       case "payment": return <PaymentSettingsTab />;
-      case "branding": return <BrandingSettingsTab />;
+      // case "branding": return <BrandingSettingsTab />;
       case "gallery": return <GallerySettingsTab />;
+      case "usage": return <UsageComponent />;
       case "notifications": return <NotificationSettingsTab />;
       case "account": return <AccountSettingsTab />;
       default: return null;

@@ -170,9 +170,9 @@ const PhotographerWebsite = ({ subdomain }) => {
                 <div className="relative group mx-auto lg:mx-0">
                   <div className="w-32 h-32 lg:w-40 lg:h-40 bg-gradient-to-r from-white to-gray-50 rounded-full p-1.5 shadow-2xl transform transition-all duration-500 group-hover:scale-105">
                     <div className="w-full h-full rounded-full overflow-hidden ring-4 ring-white/50">
-                      {photographer?.profile_picture ? (
+                      {photographer?.user?.profile_picture ? (
                         <img 
-                          src={normalizeImageUrl(photographer.profile_picture)} 
+                          src={normalizeImageUrl(photographer.user.profile_picture)} 
                           alt="Profile"
                           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         />
@@ -193,7 +193,7 @@ const PhotographerWebsite = ({ subdomain }) => {
                     {studio.name || "Photographer"}
                   </h1>
                   <p className="text-gray-600 text-lg mb-4 max-w-md">
-                    {photographer?.bio || "Capturing life's precious moments with artistic vision"}
+                    {studio?.tagline || "Capturing life's precious moments with artistic vision"}
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
                     {photographer?.specializations?.map((spec, index) => (
@@ -544,7 +544,7 @@ const AboutContent = ({ photographer, studio }) => {
         <div className="grid gap-12 lg:grid-cols-2 items-center">
           <div className="space-y-6">
             <p className="text-gray-700 leading-relaxed text-lg">
-              {photographer?.bio || "I'm a passionate photographer with a love for capturing life's most precious moments. With years of experience behind the lens, I specialize in creating stunning visual stories that you'll treasure forever."}
+              {studio?.about || "I'm a passionate photographer with a love for capturing life's most precious moments. With years of experience behind the lens, I specialize in creating stunning visual stories that you'll treasure forever."}
             </p>
             
             <div className="grid gap-6 sm:grid-cols-2">

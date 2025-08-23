@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Bell, 
   Mail, 
@@ -14,6 +14,7 @@ import {
   CreditCard,
   CheckCircle
 } from "lucide-react";
+import { useApi } from "../../useApi";
 
 export default function NotificationSettingsTab() {
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -28,31 +29,82 @@ export default function NotificationSettingsTab() {
   const [quietStart, setQuietStart] = useState("22:00");
   const [quietEnd, setQuietEnd] = useState("08:00");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [success, setSuccess] = useState("");
+  const [errors, setErrors] = useState({});
+  const { apiFetch } = useApi();
 
-  const handleSave = () => {
+  useEffect(() => {
+    const fetchNotificationSettings = async () => {
+      try {
+        const response = await apiFetch("/notifications/settings/", { method: "GET" });
+        if (response.ok) {
+          const data = await response.json();
+          setEmailNotifications(data.email_notifications);
+          setSmsNotifications(data.sms_notifications);
+          setPushNotifications(data.push_notifications);
+          setBookingReminders(data.booking_reminders);
+          setPaymentAlerts(data.payment_alerts);
+          setMarketingEmails(data.marketing_emails);
+          setClientMessages(data.client_messages);
+          setSystemUpdates(data.system_updates);
+          setQuietHours(data.quiet_hours);
+          setQuietStart(data.quiet_start || "22:00");
+          setQuietEnd(data.quiet_end || "08:00");
+        } else {
+          setErrors({ api: "Failed to load notification settings" });
+        }
+      } catch (error) {
+        console.error("Error fetching notification settings:", error);
+        setErrors({ api: "Network error occurred" });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotificationSettings();
+  }, []);
+
+  const handleSave = async () => {
     setSaving(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Notification settings saved:", {
-        emailNotifications,
-        smsNotifications,
-        pushNotifications,
-        bookingReminders,
-        paymentAlerts,
-        marketingEmails,
-        clientMessages,
-        systemUpdates,
-        quietHours,
-        quietStart,
-        quietEnd
+    setErrors({});
+    setSuccess("");
+
+    const data = {
+      email_notifications: emailNotifications,
+      sms_notifications: smsNotifications,
+      push_notifications: pushNotifications,
+      booking_reminders: bookingReminders,
+      payment_alerts: paymentAlerts,
+      marketing_emails: marketingEmails,
+      client_messages: clientMessages,
+      system_updates: systemUpdates,
+      quiet_hours: quietHours,
+      quiet_start: quietHours ? quietStart : null,
+      quiet_end: quietHours ? quietEnd : null,
+    };
+
+    try {
+      const response = await apiFetch("/notifications/settings/", {
+        method: "PUT",
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
-      // TODO: Send data to API
+
+      if (response.ok) {
+        setSuccess("Notification settings saved successfully!");
+        setTimeout(() => setSuccess(""), 3000);
+      } else {
+        const errorData = await response.json();
+        setErrors({ api: errorData.message || "Failed to save notification settings" });
+      }
+    } catch (error) {
+      console.error("Error saving notification settings:", error);
+      setErrors({ api: "Network error occurred" });
+    } finally {
       setSaving(false);
-      
-      // Show success message
-      alert("Notification settings saved successfully!");
-    }, 1500);
+    }
   };
 
   const notificationChannels = [
@@ -128,6 +180,17 @@ export default function NotificationSettingsTab() {
     }
   ];
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-slate-900 dark:to-indigo-900">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-gray-600 dark:text-gray-300">Loading settings...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-slate-900 dark:to-indigo-900 p-4 lg:p-8">
       <div className="max-w-4xl mx-auto space-y-6 lg:space-y-8">
@@ -140,6 +203,20 @@ export default function NotificationSettingsTab() {
             Notification Settings
           </h2>
         </div>
+
+        {success && (
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-2xl flex items-center animate-fadeIn">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" />
+            <span className="text-green-800 dark:text-green-300">{success}</span>
+          </div>
+        )}
+
+        {errors.api && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl flex items-center animate-fadeIn">
+            <CheckCircle className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
+            <span className="text-red-800 dark:text-red-300">{errors.api}</span>
+          </div>
+        )}
 
         <div className="grid gap-6 lg:gap-8">
           {/* Notification Channels Card */}

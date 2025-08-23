@@ -3,8 +3,9 @@ import GalleryCard from "./GalleryCard";
 import GalleryView from "./GalleryView";
 import { useAuth } from "../../AuthContext";
 import { useApi } from "../../useApi";
+import { Plus } from "lucide-react";
 
-const GalleryContent = () => {
+const GalleryContent = ({ theme }) => {
   const [galleries, setGalleries] = useState([]);
   const [publicGalleries, setPublicGalleries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,15 +23,12 @@ const GalleryContent = () => {
     shared_galleries: [],
   });
 
-  const BRAND_COLOR = '#6366f1';
-
   useEffect(() => {
     if (activeTab === "my-galleries") {
       fetchOrganizedGalleries();
     } else if (activeTab === "public") {
       fetchPublicGalleries();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const normalizeGallery = (g) => ({
@@ -57,7 +55,6 @@ const GalleryContent = () => {
         assigned_galleries: (data.assigned_galleries || []).map(normalizeGallery),
         shared_galleries: (data.shared_galleries || []).map(normalizeGallery),
       });
-      console.log("Fetched organized galleries:", data);
 
       const allGalleries = [
         ...(data.owned_galleries || []),
@@ -227,17 +224,17 @@ const GalleryContent = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-white text-lg">Loading galleries...</div>
+      <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
+        <div className="animate-pulse text-lg font-medium text-gray-600 dark:text-white">Loading galleries...</div>
       </div>
     );
   }
 
   if (selectedGallery) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className={`p-6 md:p-8 ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
         {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm backdrop-blur-sm">
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-200 text-sm font-medium animate-fade-in">
             {error}
           </div>
         )}
@@ -245,6 +242,7 @@ const GalleryContent = () => {
           gallery={selectedGallery}
           onBack={handleBackToGalleries}
           onError={handleError}
+          theme={theme}
         />
       </div>
     );
@@ -254,15 +252,15 @@ const GalleryContent = () => {
   const emptyState = getEmptyStateMessage();
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-6">
-        <div className="flex flex-wrap gap-2 mb-4 border-b border-gray-700/50">
+    <div className={`min-h-screen p-6 md:p-8 max-w-7xl mx-auto ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
+      <div className="mb-8">
+        <div className="flex flex-wrap gap-3 mb-6 border-b border-gray-200 dark:text-white">
           <button
             onClick={() => setActiveTab("my-galleries")}
-            className={`px-4 py-2 rounded-t-lg font-medium transition-all duration-200 ${
+            className={`px-4 py-2.5 rounded-t-lg font-semibold text-sm transition-all duration-300 ${
               activeTab === "my-galleries"
-                ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-b-2 border-indigo-500 shadow-lg"
-                : "text-gray-400 hover:text-white hover:bg-gray-700/50"
+                ? `bg-gradient-to-r from-indigo-600 to-blue-600 ${theme === 'dark' ? 'text-white' : 'text-gray-900'} border-b-2 border-indigo-500 shadow-md`
+                : `hover:text-gray-900 ${theme === 'dark' ? 'text-white' : 'text-gray-100'} dark:hover:bg-gray-700`
             }`}
           >
             My Galleries ({organizedGalleries.owned_galleries.length})
@@ -271,24 +269,22 @@ const GalleryContent = () => {
           {isAuthenticated && (
             <button
               onClick={() => setActiveTab("shared")}
-              className={`px-4 py-2 rounded-t-lg font-medium transition-all duration-200 ${
+              className={`px-4 py-2.5 rounded-t-lg font-semibold text-sm transition-all duration-300 ${
                 activeTab === "shared"
-                  ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-b-2 border-indigo-500 shadow-lg"
-                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
+                  ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white border-b-2 border-indigo-500 shadow-md'
+                  : 'text-gray-600 dark:text-white hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
-              Shared (
-              {organizedGalleries.assigned_galleries.length + organizedGalleries.shared_galleries.length}
-              )
+              Shared ({organizedGalleries.assigned_galleries.length + organizedGalleries.shared_galleries.length})
             </button>
           )}
 
           <button
             onClick={() => setActiveTab("public")}
-            className={`px-4 py-2 rounded-t-lg font-medium transition-all duration-200 ${
+            className={`px-4 py-2.5 rounded-t-lg font-semibold text-sm transition-all duration-300 ${
               activeTab === "public"
-                ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-b-2 border-indigo-500 shadow-lg"
-                : "text-gray-400 hover:text-white hover:bg-gray-700/50"
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white border-b-2 border-indigo-500 shadow-md'
+                : 'text-gray-600 dark:text-white hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
             Public Galleries
@@ -297,39 +293,37 @@ const GalleryContent = () => {
 
         {activeTab === "my-galleries" && isAuthenticated && (
           <>
-            <div className="flex items-center justify-between mb-4 sm:hidden">
-              <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                {getTabTitle()}
-              </h2>
+            <div className="flex items-center justify-between mb-6 sm:hidden">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{getTabTitle()}</h2>
               <button
                 onClick={() => setShowCreateForm(!showCreateForm)}
-                className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-200 shadow-lg"
+                className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                 title="Create Gallery"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus className="w-6 h-6" />
               </button>
             </div>
 
             {showCreateForm && (
-              <div className="mb-4 sm:hidden bg-gray-800/50 rounded-lg p-4 border border-gray-700/50 backdrop-blur-sm">
-                <div className="flex flex-col gap-3">
+              <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-md animate-fade-in">
+                <div className="flex flex-col gap-4">
                   <input
                     type="text"
-                    placeholder="New gallery title"
+                    placeholder="Enter new gallery title"
                     value={newGalleryTitle}
                     onChange={(e) => setNewGalleryTitle(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleCreateGallery()}
-                    className="p-3 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base transition-all duration-200"
+                    className="p-3 rounded-lg text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 text-base font-medium transition-all duration-300"
                     disabled={creating}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <button
                       onClick={handleCreateGallery}
                       disabled={creating}
-                      className={`flex-1 py-3 px-4 rounded-lg text-white font-medium transition-all duration-200 ${
-                        creating ? "bg-gray-600/50 cursor-not-allowed" : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg"
+                      className={`flex-1 py-3 px-4 rounded-lg text-white font-semibold text-sm transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${
+                        creating
+                          ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700'
                       }`}
                     >
                       {creating ? "Creating..." : "Create Gallery"}
@@ -339,7 +333,7 @@ const GalleryContent = () => {
                         setShowCreateForm(false);
                         setNewGalleryTitle("");
                       }}
-                      className="py-3 px-4 rounded-lg text-gray-300 bg-gray-600/50 hover:bg-gray-700/50 transition-all duration-200 font-medium border border-gray-600/50"
+                      className="py-3 px-4 rounded-lg text-gray-600 dark:text-white bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 font-semibold text-sm transition-all duration-300"
                     >
                       Cancel
                     </button>
@@ -348,25 +342,25 @@ const GalleryContent = () => {
               </div>
             )}
 
-            <div className="hidden sm:flex flex-wrap gap-2 items-center justify-between">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                {getTabTitle()}
-              </h2>
-              <div className="flex gap-2 items-center">
+            <div className="hidden sm:flex flex-wrap gap-4 items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{getTabTitle()}</h2>
+              <div className="flex gap-3 items-center">
                 <input
                   type="text"
-                  placeholder="New gallery title"
+                  placeholder="Enter new gallery title"
                   value={newGalleryTitle}
                   onChange={(e) => setNewGalleryTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreateGallery()}
-                  className="p-2 rounded-lg text-white bg-gray-700/50 border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
+                  className="p-3 rounded-lg text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 text-base font-medium transition-all duration-300"
                   disabled={creating}
                 />
                 <button
                   onClick={handleCreateGallery}
                   disabled={creating}
-                  className={`py-2 px-4 rounded-lg text-white font-medium transition-all duration-200 ${
-                    creating ? "bg-gray-600/50 cursor-not-allowed" : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg"
+                  className={`py-3 px-4 rounded-lg text-white font-semibold text-sm transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${
+                    creating
+                      ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700'
                   }`}
                 >
                   {creating ? "Creating..." : "Create Gallery"}
@@ -378,15 +372,13 @@ const GalleryContent = () => {
 
         {activeTab !== "my-galleries" && (
           <div className="hidden sm:block">
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              {getTabTitle()}
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{getTabTitle()}</h2>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm backdrop-blur-sm">
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-200 text-sm font-medium animate-fade-in">
           {error}
         </div>
       )}
@@ -394,7 +386,7 @@ const GalleryContent = () => {
       {currentGalleries.length === 0 ? (
         <div className="text-center py-12">
           <svg
-            className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4"
+            className="w-16 h-16 text-gray-300 dark:text-gray-500 mx-auto mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -402,15 +394,15 @@ const GalleryContent = () => {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={1}
+              strokeWidth={1.5}
               d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
             />
           </svg>
-          <p className="text-gray-400 text-base sm:text-lg">{emptyState.title}</p>
-          <p className="text-gray-500 text-sm mt-2">{emptyState.subtitle}</p>
+          <p className="text-lg font-semibold text-gray-600 dark:text-white">{emptyState.title}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{emptyState.subtitle}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {currentGalleries.map((gallery) => (
             <GalleryCard
               key={gallery.id}
@@ -460,25 +452,26 @@ const GalleryContent = () => {
               onAddPhotos={(gallery) => {
                 setSelectedGallery(gallery);
               }}
-              onSubGalleryCreated={async (parentId, newSubGallery) => {
+              onSubGalleryCreated={async () => {
                 await fetchOrganizedGalleries();
               }}
               onAddToCollection={handleAddToCollection}
               showAddToCollection={
                 activeTab === "public" || (activeTab === "shared" && gallery.access_type === "public")
               }
+              theme={theme}
             />
           ))}
         </div>
       )}
 
       {activeTab === "shared" && isAuthenticated && (
-        <div className="mt-8">
+        <div className="mt-10 space-y-8">
           {organizedGalleries.assigned_galleries.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-3 flex items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                 <svg
-                  className="w-5 h-5 mr-2 text-indigo-500"
+                  className="w-6 h-6 mr-2 text-indigo-600 dark:text-indigo-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -492,13 +485,14 @@ const GalleryContent = () => {
                 </svg>
                 Assigned by Photographers ({organizedGalleries.assigned_galleries.length})
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                 {organizedGalleries.assigned_galleries.map((gallery) => (
                   <GalleryCard
                     key={`assigned-${gallery.id}`}
                     gallery={gallery}
                     onClick={handleSelectGallery}
                     showAddToCollection={false}
+                    theme={theme}
                   />
                 ))}
               </div>
@@ -507,9 +501,9 @@ const GalleryContent = () => {
 
           {organizedGalleries.shared_galleries.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-3 flex items-center">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                 <svg
-                  className="w-5 h-5 mr-2 text-purple-500"
+                  className="w-6 h-6 mr-2 text-purple-600 dark:text-purple-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -523,13 +517,14 @@ const GalleryContent = () => {
                 </svg>
                 Added from Sharing ({organizedGalleries.shared_galleries.length})
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                 {organizedGalleries.shared_galleries.map((gallery) => (
                   <GalleryCard
                     key={`shared-${gallery.id}`}
                     gallery={gallery}
                     onClick={handleSelectGallery}
                     showAddToCollection={false}
+                    theme={theme}
                   />
                 ))}
               </div>
@@ -539,9 +534,9 @@ const GalleryContent = () => {
       )}
 
       {!isAuthenticated && activeTab !== "public" && (
-        <div className="mt-8 text-center p-6 bg-gray-800/50 rounded-lg border border-gray-700/50 backdrop-blur-sm">
+        <div className="mt-10 text-center p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md animate-fade-in">
           <svg
-            className="w-12 h-12 text-gray-400 mx-auto mb-4"
+            className="w-16 h-16 text-gray-300 dark:text-gray-500 mx-auto mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -549,21 +544,19 @@ const GalleryContent = () => {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={1}
+              strokeWidth={1.5}
               d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
             />
           </svg>
-          <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
-            Login Required
-          </h3>
-          <p className="text-gray-400 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Login Required</h3>
+          <p className="text-gray-600 dark:text-white mb-4 text-sm">
             Please log in to access your personal galleries and shared content.
           </p>
           <button
             onClick={() => {
               window.location.href = "/login";
             }}
-            className="px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg transition-all duration-200 shadow-lg"
+            className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-lg font-semibold text-sm transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
           >
             Log In
           </button>

@@ -9,7 +9,7 @@ import {
   HeartIcon,
   DownloadIcon,
 } from "@heroicons/react/outline";
-import { useApi } from "../../useApi"; // Import useApi
+import { useApi } from "../../useApi";
 import PhotoPreview from "./PhotoPreview";
 import { useAuth } from "../../AuthContext";
 
@@ -20,6 +20,10 @@ const PhotoCard = ({
   onInfo,
   onAddToCollection,
   showAddToCollection = false,
+  isSelected,
+  onToggleSelection,
+  selectedItems,
+  theme,
 }) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newCaption, setNewCaption] = useState(photo.caption || "");
@@ -32,11 +36,12 @@ const PhotoCard = ({
   const [shareUrl, setShareUrl] = useState(photo?.share_url || "");
   const [updating, setUpdating] = useState(false);
   const { token, isAuthenticated } = useAuth();
-  const { apiFetch } = useApi(); // Use the useApi hook
+  const { apiFetch } = useApi();
 
   const handleRenameSubmit = () => {
     if (newCaption.trim() && newCaption !== photo.caption) {
-      onRename(photo, newCaption);
+      console.log(newCaption)
+      onRename(photo.id, newCaption);
     }
     setIsRenaming(false);
   };
@@ -57,7 +62,8 @@ const PhotoCard = ({
     if (
       e.target.closest("[data-menu]") ||
       e.target.closest("[data-rename]") ||
-      e.target.closest("[data-button]")
+      e.target.closest("[data-button]") ||
+      e.target.closest("[data-selection]")
     ) {
       return;
     }
@@ -149,13 +155,49 @@ const PhotoCard = ({
     onAddToCollection?.(photo);
   };
 
+  const handleDragStart = (e) => {
+    let photoIds = [photo.id];
+    if (selectedItems.size > 0) {
+      photoIds = Array.from(selectedItems)
+        .filter((itemId) => itemId.startsWith("photo-"))
+        .map((itemId) => itemId.split("-")[1]);
+      if (!photoIds.includes(photo.id)) {
+        photoIds = [photo.id];
+      }
+    }
+    console.log("Drag started with photo IDs:", photoIds);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/json", JSON.stringify({ photoIds }));
+    document.body.style.cursor = "grabbing";
+    const preview = document.createElement("div");
+    preview.innerText = `${photoIds.length} photo${photoIds.length > 1 ? "s" : ""}`;
+    preview.style.cssText = `
+      position: absolute;
+      background: rgba(79, 70, 229, 0.9);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 1000;
+    `;
+    document.body.appendChild(preview);
+    e.dataTransfer.setDragImage(preview, 0, 0);
+    setTimeout(() => document.body.removeChild(preview), 0);
+  };
+
+  const handleDragEnd = () => {
+    console.log("Drag ended");
+    document.body.style.cursor = "";
+  };
+
   const getStatusIcon = () => {
     if (visibility === "public") {
-      return <GlobeIcon className="h-3 w-3 text-emerald-400" />;
+      return <GlobeIcon className="h-2.5 w-2.5 text-emerald-400" />;
     } else if (isShareableViaLink) {
-      return <ShareIcon className="h-3 w-3 text-blue-400" />;
+      return <ShareIcon className="h-2.5 w-2.5 text-blue-400" />;
     } else {
-      return <LockClosedIcon className="h-3 w-3 text-slate-400" />;
+      return <LockClosedIcon className="h-2.5 w-2.5 text-slate-400" />;
     }
   };
 
@@ -166,19 +208,19 @@ const PhotoCard = ({
           return null;
         case "assigned":
           return (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/80 text-white border border-blue-400/30">
+            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-500/80 text-white border border-blue-400/30">
               Assigned
             </span>
           );
         case "shared":
           return (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-500/80 text-white border border-emerald-400/30">
+            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-emerald-500/80 text-white border border-emerald-400/30">
               Shared
             </span>
           );
         case "public":
           return (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-500/80 text-white border border-purple-400/30">
+            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-purple-500/80 text-white border border-purple-400/30">
               Public
             </span>
           );
@@ -194,11 +236,14 @@ const PhotoCard = ({
   return (
     <>
       <div
-        className="relative group bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-md border border-slate-700/40 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] w-full"
+        className={`relative group bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-md border border-slate-700/40 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] w-full max-w-xs`}
         onClick={handleCardClick}
-        style={{ height: "220px" }}
+        style={{ height: "180px" }}
+        draggable={true}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-        <div className="w-full h-40">
+        <div className="w-full h-32">
           <img
             src={photo.image}
             alt={photo.caption || "Photo"}
@@ -209,7 +254,7 @@ const PhotoCard = ({
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-t-xl" />
         </div>
 
-        <div className="h-20 p-3 bg-slate-800/90 text-white text-sm flex flex-col justify-between rounded-b-xl">
+        <div className="h-16 p-2 bg-slate-800/90 text-white text-xs flex flex-col justify-between rounded-b-xl">
           {isRenaming ? (
             <input
               data-rename
@@ -219,16 +264,16 @@ const PhotoCard = ({
               onBlur={handleRenameSubmit}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="w-full px-2 py-1 bg-slate-700/50 text-white rounded-md border border-slate-600/50 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              className="w-full px-1.5 py-0.5 bg-slate-700/50 text-white rounded-md border border-slate-600/50 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
               onClick={(e) => e.stopPropagation()}
               placeholder="Enter caption..."
             />
           ) : (
             <>
-              <span className="line-clamp-2 overflow-hidden flex-1 text-sm font-medium">
+              <span className="line-clamp-2 overflow-hidden flex-1 text-xs font-medium">
                 {photo.caption || "Untitled"}
               </span>
-              <div className="flex items-center justify-between mt-1">
+              <div className="flex items-center justify-between mt-0.5">
                 {getAccessTypeDisplay()}
                 <div className="flex items-center gap-1">{getStatusIcon()}</div>
               </div>
@@ -239,29 +284,45 @@ const PhotoCard = ({
         {showAddToCollection && (
           <div
             data-button
-            className="absolute top-2 left-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-20"
+            className="absolute top-1.5 left-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-20"
           >
             <button
               onClick={handleAddToCollection}
-              className="p-1.5 bg-emerald-600/90 rounded-full hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center"
+              className="p-1 bg-emerald-600/90 rounded-full hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center"
               title="Add to My Collection"
             >
-              <HeartIcon className="h-4 w-4 text-white" />
+              <HeartIcon className="h-3.5 w-3.5 text-white" />
             </button>
           </div>
         )}
 
         <div
+          data-selection
+          className="absolute top-1.5 left-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-20"
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleSelection();
+            }}
+            className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 rounded"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+
+        <div
           data-menu
-          className="absolute top-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-40"
+          className="absolute top-1.5 right-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-40"
           onClick={(e) => e.stopPropagation()}
         >
           <Menu as="div" className="relative inline-block text-left z-[100]">
-            <Menu.Button className="p-1.5 bg-black/40 backdrop-blur-sm rounded-full hover:bg-black/60 border border-white/10 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-slate-800 transition-all duration-200">
-              <DotsVerticalIcon className="h-4 w-4 text-white" />
+            <Menu.Button className="p-1 bg-black/40 backdrop-blur-sm rounded-full hover:bg-black/60 border border-white/10 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-slate-800 transition-all duration-200">
+              <DotsVerticalIcon className="h-3.5 w-3.5 text-white" />
             </Menu.Button>
 
-            <Menu.Items className="absolute right-0 mt-1 w-36 bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 text-white rounded-md shadow-xl z-[100] divide-y divide-slate-700/30">
+            <Menu.Items className="absolute right-0 mt-1 w-32 bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 text-white rounded-md shadow-xl z-[100] divide-y divide-slate-700/30">
               <Menu.Item>
                 {({ active }) => (
                   <button
@@ -269,12 +330,12 @@ const PhotoCard = ({
                       e.stopPropagation();
                       openPreview();
                     }}
-                    className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                    className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                       active ? "bg-slate-700/50 text-white" : "text-slate-200"
                     }`}
                   >
                     <svg
-                      className="w-3.5 h-3.5 mr-1.5 flex-shrink-0"
+                      className="w-3 h-3 mr-1 flex-shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -304,11 +365,11 @@ const PhotoCard = ({
                       e.stopPropagation();
                       handleDownload();
                     }}
-                    className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                    className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                       active ? "bg-slate-700/50 text-white" : "text-slate-200"
                     }`}
                   >
-                    <DownloadIcon className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                    <DownloadIcon className="w-3 h-3 mr-1 flex-shrink-0" />
                     <span>Download</span>
                   </button>
                 )}
@@ -323,12 +384,12 @@ const PhotoCard = ({
                           e.stopPropagation();
                           setIsRenaming(true);
                         }}
-                        className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                        className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                           active ? "bg-slate-700/50 text-white" : "text-slate-200"
                         }`}
                       >
                         <svg
-                          className="w-3.5 h-3.5 mr-1.5 flex-shrink-0"
+                          className="w-3 h-3 mr-1 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -352,11 +413,11 @@ const PhotoCard = ({
                           e.stopPropagation();
                           setShowShareModal(true);
                         }}
-                        className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                        className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                           active ? "bg-slate-700/50 text-white" : "text-slate-200"
                         }`}
                       >
-                        <ShareIcon className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                        <ShareIcon className="w-3 h-3 mr-1 flex-shrink-0" />
                         <span>Share</span>
                       </button>
                     )}
@@ -371,12 +432,12 @@ const PhotoCard = ({
                             onDelete(photo);
                           }
                         }}
-                        className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                        className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                           active ? "bg-red-600/50 text-white" : "text-red-400 hover:text-red-300"
                         }`}
                       >
                         <svg
-                          className="w-3.5 h-3.5 mr-1.5 flex-shrink-0"
+                          className="w-3 h-3 mr-1 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -400,11 +461,11 @@ const PhotoCard = ({
                   {({ active }) => (
                     <button
                       onClick={handleAddToCollection}
-                      className={`flex items-center w-full px-2 py-1.5 text-xs text-left transition-colors ${
+                      className={`flex items-center w-full px-1.5 py-1 text-[10px] text-left transition-colors ${
                         active ? "bg-slate-700/50 text-white" : "text-slate-200"
                       }`}
                     >
-                      <HeartIcon className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                      <HeartIcon className="w-3 h-3 mr-1 flex-shrink-0" />
                       <span>Add to Collection</span>
                     </button>
                   )}
@@ -426,29 +487,29 @@ const PhotoCard = ({
 
       {showShareModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto border border-slate-700/30 shadow-lg">
-            <div className="flex justify-between items-center mb-4">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg max-w-sm w-full p-5 max-h-[90vh] overflow-y-auto border border-slate-700/30 shadow-lg">
+            <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="text-lg font-semibold text-white">Share Photo</h3>
-                <p className="text-xs text-slate-400">Configure photo access</p>
+                <h3 className="text-base font-semibold text-white">Share Photo</h3>
+                <p className="text-[10px] text-slate-400">Configure photo access</p>
               </div>
               <button
                 onClick={() => setShowShareModal(false)}
                 className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-md"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-white mb-3">
+                <label className="block text-xs font-medium text-white mb-2">
                   Visibility
                 </label>
-                <div className="space-y-3">
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
+                <div className="space-y-2">
+                  <label className="flex items-center p-2 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="visibility"
@@ -456,17 +517,17 @@ const PhotoCard = ({
                       checked={visibility === "private"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                      className="w-3.5 h-3.5 mr-2 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="flex items-center flex-1">
-                      <LockClosedIcon className="h-4 w-4 text-slate-300 mr-2" />
+                      <LockClosedIcon className="h-3.5 w-3.5 text-slate-300 mr-1.5" />
                       <div>
-                        <span className="text-sm text-white font-medium">Private</span>
-                        <p className="text-xs text-slate-400">Only you can access this photo.</p>
+                        <span className="text-xs text-white font-medium">Private</span>
+                        <p className="text-[10px] text-slate-400">Only you can access this photo.</p>
                       </div>
                     </div>
                   </label>
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
+                  <label className="flex items-center p-2 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="visibility"
@@ -474,72 +535,72 @@ const PhotoCard = ({
                       checked={visibility === "public"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                      className="w-3.5 h-3.5 mr-2 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="flex items-center flex-1">
-                      <GlobeIcon className="h-4 w-4 text-emerald-400 mr-2" />
+                      <GlobeIcon className="h-3.5 w-3.5 text-emerald-400 mr-1.5" />
                       <div>
-                        <span className="text-sm text-white font-medium">Public</span>
-                        <p className="text-xs text-slate-400">Anyone can view this photo.</p>
+                        <span className="text-xs text-white font-medium">Public</span>
+                        <p className="text-[10px] text-slate-400">Anyone can view this photo.</p>
                       </div>
                     </div>
                   </label>
                 </div>
               </div>
 
-              <div className="border-t border-slate-700/40 pt-4">
-                <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
+              <div className="border-t border-slate-700/40 pt-3">
+                <label className="flex items-center p-2 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isShareableViaLink}
                     onChange={(e) => handleShareLinkToggle(e.target.checked)}
                     disabled={updating}
-                    className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                    className="w-3.5 h-3.5 mr-2 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="flex items-center flex-1">
-                    <ShareIcon className="h-4 w-4 text-blue-400 mr-2" />
+                    <ShareIcon className="h-3.5 w-3.5 text-blue-400 mr-1.5" />
                     <div>
-                      <span className="text-sm text-white font-medium">Shareable Link</span>
-                      <p className="text-xs text-slate-400">Create a unique URL to share.</p>
+                      <span className="text-xs text-white font-medium">Shareable Link</span>
+                      <p className="text-[10px] text-slate-400">Create a unique URL to share.</p>
                     </div>
                   </div>
                 </label>
               </div>
 
               {shareUrl && isShareableViaLink && (
-                <div className="border-t border-slate-700/40 pt-4">
-                  <label className="block text-sm font-medium text-white mb-3">
+                <div className="border-t border-slate-700/40 pt-3">
+                  <label className="block text-xs font-medium text-white mb-2">
                     Share Link
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="text"
                       value={`${window.location.origin}${shareUrl}`}
                       readOnly
-                      className="flex-1 p-2 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 p-1.5 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-[10px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       onClick={copyShareUrl}
-                      className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
+                      className="p-1.5 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
                       title="Copy Link"
                     >
-                      <ClipboardCopyIcon className="h-4 w-4" />
+                      <ClipboardCopyIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
               )}
 
               {updating && (
-                <div className="text-center py-4 border-t border-slate-700/40">
-                  <div className="w-6 h-6 mx-auto animate-spin border-2 border-blue-400 border-t-transparent rounded-full"></div>
-                  <p className="text-xs text-slate-400 mt-2">Updating settings...</p>
+                <div className="text-center py-3 border-t border-slate-700/40">
+                  <div className="w-5 h-5 mx-auto animate-spin border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                  <p className="text-[10px] text-slate-400 mt-1">Updating settings...</p>
                 </div>
               )}
 
-              <div className="border-t border-slate-700/40 pt-4">
+              <div className="border-t border-slate-700/40 pt-3">
                 <button
                   onClick={() => setShowShareModal(false)}
-                  className="w-full py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-md text-sm"
+                  className="w-full py-1.5 bg-slate-700/50 hover:bg-slate-700 text-white rounded-md text-xs"
                 >
                   Done
                 </button>

@@ -9,52 +9,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const fetchingRef = useRef(false);
-  const CACHE_KEY = 'lensra_user_stats';
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   const BRAND_COLOR = '#6366f1';
-
-  // Load cached stats from localStorage
-  const loadCachedStats = () => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        const now = Date.now();
-        if (now - timestamp < CACHE_DURATION) {
-          return data;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading cached stats:', error);
-    }
-    return null;
-  };
-
-  // Save stats to localStorage
-  const saveStatsToCache = (data) => {
-    try {
-      const cacheData = {
-        data,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error('Error saving stats to cache:', error);
-    }
-  };
-
-  // Check if cache needs refresh
-  const shouldRefreshCache = () => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached) return true;
-      const { timestamp } = JSON.parse(cached);
-      const now = Date.now();
-      return (now - timestamp) >= CACHE_DURATION;
-    } catch (error) {
-      return true;
-    }
-  };
 
   // Fetch fresh stats from server
   const fetchFreshStats = async () => {
@@ -66,7 +21,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
         throw new Error('Failed to fetch user stats');
       }
       const data = await response.json();
-      saveStatsToCache(data);
+      console.log('Fetched stats:', data); // Debug: Verify data structure
       return data;
     } catch (error) {
       console.error('Error fetching fresh stats:', error);
@@ -76,63 +31,37 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
     }
   };
 
-  // Initialize stats from cache and fetch if needed
+  // Initialize stats by fetching fresh data
   useEffect(() => {
-    let isMounted = true;
-
     const initializeStats = async () => {
-      if (!isMounted) return;
-
-      const cachedStats = loadCachedStats();
-      if (cachedStats) {
-        setUserStats(cachedStats);
+      try {
+        setLoading(true);
+        setError(null);
+        const freshStats = await fetchFreshStats();
+        console.log('Setting userStats:', freshStats); // Debug: Verify state update
+        setUserStats(freshStats || null);
+      } catch (error) {
+        setError(error.message || 'Failed to load user data');
+      } finally {
         setLoading(false);
-        if (shouldRefreshCache()) {
-          try {
-            const freshStats = await fetchFreshStats();
-            if (isMounted && freshStats) {
-              setUserStats(freshStats);
-            }
-          } catch (error) {
-            console.error('Background refresh failed:', error);
-          }
-        }
-      } else {
-        try {
-          setLoading(true);
-          setError(null);
-          const freshStats = await fetchFreshStats();
-          if (isMounted && freshStats) {
-            setUserStats(freshStats);
-          }
-        } catch (error) {
-          if (isMounted) {
-            setError(error.message || 'Failed to load user data');
-          }
-        } finally {
-          if (isMounted) {
-            setLoading(false);
-          }
-        }
       }
     };
 
     initializeStats();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Function to manually refresh stats
   const refreshStats = async () => {
     try {
       setError(null);
+      setLoading(true);
       const freshStats = await fetchFreshStats();
-      if (freshStats) {
-        setUserStats(freshStats);
-      }
+      console.log('Refreshed stats:', freshStats); // Debug: Verify refresh
+      setUserStats(freshStats || null);
     } catch (error) {
       setError(error.message || 'Failed to refresh stats');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -213,7 +142,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
       {/* Mobile Overlay */}
       {isMenuOpen && (
         <div 
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          className="lg:hidden fixed top-0 left-0 right-0 bottom-0 bg-black/50 z-30"
           onClick={() => closeMenu()}
         />
       )}
@@ -294,7 +223,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                 Retry
               </button>
             </div>
-          ) : (
+          ) : userStats ? (
             <div
               onClick={() => setShowStatsModal(true)}
               className="bg-gradient-to-br from-gray-700 via-gray-750 to-gray-800 
@@ -317,13 +246,13 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                   </span>
                 </div>
                 <span className="text-xs text-gray-400 font-medium">
-                  {formatStorageSize(userStats?.storage_used)}
+                  {formatStorageSize(userStats.storage_used ?? 0)}
                 </span>
               </div>
 
               {/* Progress Bar */}
               <div className="relative mb-3">
-                <div className="w-full bg-gray-600/40 rounded-full h-2 overflow-hidden backdrop-blur-sm">
+                <div className="w-full bg-gray-600/40 rounded-full h-2 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700 ease-out relative"
                     style={{
@@ -353,16 +282,26 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="bg-gray-700/20 border border-gray-600/30 rounded-2xl p-4 text-center">
+              <p className="text-gray-400 text-sm">No stats available</p>
+              <button 
+                onClick={refreshStats}
+                className="mt-2 text-xs text-indigo-300 hover:text-indigo-200 underline"
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       </aside>
 
       {/* Stats Modal */}
       {showStatsModal && userStats && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-gradient-to-br from-gray-800 via-gray-850 to-gray-900 
                          rounded-3xl w-full max-w-lg shadow-2xl border border-gray-600/50 
-                         transform transition-all duration-300 scale-100">
+                         transform transition-all duration-300 scale-100 max-h-[70vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-700/50">
               <h2 className="text-2xl font-bold text-white">Account Overview</h2>
@@ -405,7 +344,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                       {getStoragePercentage().toFixed(1)}%
                     </span>
                   </div>
-                  <div className="w-full bg-gray-600/30 rounded-full h-3 overflow-hidden backdrop-blur-sm">
+                  <div className="w-full bg-gray-600/30 rounded-full h-3 overflow-hidden">
                     <div
                       className="h-3 rounded-full transition-all duration-700 relative"
                       style={{
@@ -418,10 +357,10 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                     </div>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>{formatStorageSize(userStats.storage_used)}</span>
+                    <span>{formatStorageSize(userStats.storage_used ?? 0)}</span>
                     <span>{isUnlimited(userStats?.plan_limits?.storage_gb) 
                       ? '∞' 
-                      : formatStorageSize(userStats?.plan_limits?.storage_gb)}</span>
+                      : formatStorageSize(userStats?.plan_limits?.storage_gb ?? 0)}</span>
                   </div>
                 </div>
               </div>
@@ -429,10 +368,10 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: 'Galleries', count: userStats.galleries_count, max: userStats.plan_limits.max_galleries_count, color: 'blue' },
-                  { label: 'Photos', count: userStats.photos_count, max: userStats.plan_limits.max_photos_count, color: 'green' },
-                  { label: 'Bookings', count: userStats.bookings_count, max: userStats.plan_limits.max_bookings_count, color: 'purple' },
-                  { label: 'Clients', count: userStats.clients_count, max: userStats.plan_limits.max_clients_count, color: 'orange' }
+                  { label: 'Galleries', count: userStats.galleries_count ?? 0, max: userStats.plan_limits?.max_galleries_count, color: 'blue' },
+                  { label: 'Photos', count: userStats.photos_count ?? 0, max: userStats.plan_limits?.max_photos_count, color: 'green' },
+                  { label: 'Bookings', count: userStats.bookings_count ?? 0, max: userStats.plan_limits?.max_bookings_count, color: 'purple' },
+                  { label: 'Clients', count: userStats.clients_count ?? 0, max: userStats.plan_limits?.max_clients_count, color: 'orange' }
                 ].map((stat) => {
                   const colorMap = {
                     blue: '#3B82F6',
@@ -442,13 +381,13 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                   };
                   
                   return (
-                    <div key={stat.label} className="bg-gray-700/30 rounded-2xl p-4 border border-gray-600/30 relative overflow-hidden backdrop-blur-sm">
+                    <div key={stat.label} className="bg-gray-700/30 rounded-2xl p-4 border border-gray-600/30 relative overflow-hidden">
                       <div className="text-3xl font-bold text-white mb-1">
                         {stat.count.toLocaleString()}
                       </div>
                       <div className="text-sm text-gray-300 font-medium mb-1">{stat.label}</div>
                       <div className="text-xs text-gray-400">
-                        {isUnlimited(stat.max) ? 'Unlimited' : `of ${stat.max.toLocaleString()}`}
+                        {isUnlimited(stat.max) ? 'Unlimited' : `of ${stat.max?.toLocaleString() ?? 'N/A'}`}
                       </div>
                       
                       {!isUnlimited(stat.max) && (
@@ -469,7 +408,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
               </div>
 
               {/* AI Tools */}
-              {userStats.plan_limits.ai_tools && userStats.plan_limits.ai_tools.length > 0 && (
+              {userStats.plan_limits?.ai_tools && userStats.plan_limits.ai_tools.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3">AI Tools Available</h3>
                   <div className="flex flex-wrap gap-2">
@@ -495,7 +434,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
                     closeMenu();
                   }}
                   className="flex-1 bg-gray-600/50 hover:bg-gray-600 text-white py-3 px-4 rounded-xl 
-                           transition-all duration-200 font-medium border border-gray-500/50 backdrop-blur-sm"
+                           transition-all duration-200 font-medium border border-gray-500/50"
                 >
                   Manage Plan
                 </button>

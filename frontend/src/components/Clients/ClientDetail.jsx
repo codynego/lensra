@@ -1,30 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, User, ChevronRight, Edit2, Plus, Mail, Phone, X, MessageCircle } from 'lucide-react';
+import {
+  CalendarIcon,
+  CurrencyDollarIcon,
+  UserIcon,
+  ChevronRightIcon,
+  PencilIcon,
+  PhoneIcon,
+  MailIcon,
+  PlusIcon,
+  XIcon,
+  EyeIcon
+} from '@heroicons/react/outline';
 import { useApi } from '../../useApi';
+import { format, isValid } from 'date-fns';
 
-// API base URL from environment variable or fallback
-// const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://lvh.me:8000';
+// Utility function for currency formatting
+const formatCurrency = (value) => {
+  const num = Number(value);
+  return isNaN(num) ? '0.00' : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
-const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
+const ClientDetail = ({ client, onBack, onEdit }) => {
   const { apiFetch } = useApi();
   const [bookings, setBookings] = useState([]);
+  const [clientStats, setClientStats] = useState({
+    total_bookings: 0,
+    total_spent: 0,
+    last_booking_date: null,
+  });
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [error, setError] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [packages, setPackages] = useState([]);
-  const [timeSlots, setTimeSlots] = useState([]);
-  const [selectedPhotographerId, setSelectedPhotographerId] = useState(null);
-  const [selectedSlotId, setSelectedSlotId] = useState(null); // Track selected slot ID
+  const [loadingPackages, setLoadingPackages] = useState(false);
   const [formData, setFormData] = useState({
     package: '',
-    date: '',
-    start_time: '',
-    location: '',
-    notes: '',
+    session_date: '',
+    session_time: '',
+    status: 'pending',
+    notes: ''
   });
   const [formErrors, setFormErrors] = useState({});
-  const [loadingPackages, setLoadingPackages] = useState(false);
-  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [editingBooking, setEditingBooking] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    status: 'pending'
+  });
 
   useEffect(() => {
     if (client) {
@@ -36,24 +58,44 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
   const loadClientBookings = async () => {
     try {
       setLoadingBookings(true);
-      const response = await apiFetch(`/bookings/bookings/`, {
+      setError(null);
+      const response = await apiFetch(`/clients/${client.id}/bookings/`, {
         method: 'GET',
       });
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API Error (Bookings):', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to load bookings: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      // Filter bookings for this client using the correct field names
-      const clientBookings = data.filter(booking => 
-        booking.client === client.id || 
-        booking.client_id === client.id ||
-        booking.client_name === client.name
-      );
-      setBookings(clientBookings);
+      console.log('API Response (loadClientBookings):', data); // Debug: Log raw API response
+
+      // Normalize status and validate bookings
+      const validBookings = data.map(booking => ({
+        ...booking,
+        status: booking.status ? booking.status.toLowerCase() : 'unknown',
+        package_price: Number(booking.package_price) || 0,
+      }));
+      console.log('Valid Bookings:', validBookings); // Debug: Log processed bookings
+
+      setBookings(validBookings);
+
+      // Calculate client stats
+      const total_bookings = validBookings.length;
+      const total_spent = validBookings.reduce((sum, b) => sum + (Number(b.package_price) || 0), 0);
+      const last_booking_date = validBookings.length > 0
+        ? validBookings.reduce((latest, b) =>
+            !b.session_date || !isValid(new Date(b.session_date))
+              ? latest
+              : !latest || new Date(b.session_date) > new Date(latest)
+              ? b.session_date
+              : latest, null)
+        : null;
+
+      console.log('Client Stats:', { total_bookings, total_spent, last_booking_date }); // Debug: Log stats
+      setClientStats({ total_bookings, total_spent, last_booking_date });
     } catch (err) {
-      console.error('Error loading bookings:', err);
+      setError('Failed to load bookings');
+      console.error('Fetch Error (loadClientBookings):', err); // Debug: Log error
+      alert('Failed to load bookings');
       setBookings([]);
     } finally {
       setLoadingBookings(false);
@@ -63,244 +105,83 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
   const loadPackages = async () => {
     try {
       setLoadingPackages(true);
-      console.log('=== LOADING PACKAGES ===');
-      
       const response = await apiFetch(`/bookings/packages/`, {
         method: 'GET',
       });
-      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API Error (Packages):', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to load packages: ${response.status} ${response.statusText}`);
       }
-      
       const data = await response.json();
-      console.log('📦 Packages loaded:', data);
-      
+      console.log('API Response (loadPackages):', data); // Debug: Log packages
       setPackages(data);
     } catch (err) {
-      console.error('❌ Error loading packages:', err);
+      setError('Failed to load packages');
+      console.error('Fetch Error (loadPackages):', err); // Debug: Log error
+      alert('Failed to load packages');
       setPackages([]);
     } finally {
       setLoadingPackages(false);
     }
   };
 
-  const loadTimeSlots = async (date, photographerId) => {
-    console.log('=== LOADING TIME SLOTS ===');
-    console.log('📅 Date:', date);
-    console.log('👤 Photographer ID:', photographerId);
-
-    if (!photographerId || !date) {
-      console.log('❌ Missing required params');
-      setTimeSlots([]);
-      setLoadingTimeSlots(false);
-      return;
-    }
-
-    try {
-      setLoadingTimeSlots(true);
-      
-      const url = `/bookings/time-slots/?photographer=${encodeURIComponent(photographerId)}&date=${encodeURIComponent(date)}`;
-      console.log('🌐 Request URL:', url);
-      
-      const response = await apiFetch(url, {
-        method: 'GET',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API Error (Time Slots):', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('📋 Raw time slots:', data);
-
-      // Filter available slots
-      const availableSlots = data.filter(slot => !slot.is_booked);
-      console.log('✅ Available slots:', availableSlots);
-      setTimeSlots(availableSlots);
-    } catch (err) {
-      console.error('❌ Error loading time slots:', err);
-      setTimeSlots([]);
-    } finally {
-      setLoadingTimeSlots(false);
-    }
-  };
-
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    console.log('=== INPUT CHANGE ===');
-    console.log('📝 Field:', name, 'Value:', value);
-
-    // Update form data
-    setFormData((prev) => {
-      const newData = { ...prev, [name]: value };
-      console.log('📋 Updated form data:', newData);
-      return newData;
-    });
-
-    // Clear previous errors
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value
+    }));
     if (formErrors[name]) {
-      setFormErrors(prev => {
-        const { [name]: removed, ...rest } = prev;
-        return rest;
-      });
-    }
-
-    if (name === 'package' && value) {
-      const selectedPackage = packages.find((pkg) => pkg.id === parseInt(value, 10));
-      console.log('✅ Selected package:', selectedPackage);
-
-      if (selectedPackage) {
-        // Reset time slot selection when package changes
-        setFormData((prev) => ({
-          ...prev,
-          start_time: ''
-        }));
-        setSelectedSlotId(null);
-        console.log('🔄 Reset slot selection due to package change');
-
-        // Set selected photographer ID
-        const photographerId = selectedPackage.photographer;
-        setSelectedPhotographerId(photographerId);
-
-        // Load time slots if date is selected
-        if (formData.date && photographerId) {
-          console.log('🚀 Loading time slots for package change');
-          loadTimeSlots(formData.date, photographerId);
-        } else {
-          setTimeSlots([]);
-        }
-      } else {
-        setFormData((prev) => ({ ...prev, start_time: '' }));
-        setTimeSlots([]);
-        setSelectedPhotographerId(null);
-        setSelectedSlotId(null);
-      }
-    }
-
-    if (name === 'date' && value && formData.package) {
-      const currentPackage = packages.find((pkg) => pkg.id === parseInt(formData.package, 10));
-
-      if (currentPackage?.photographer) {
-        // Reset time slot selection when date changes
-        setFormData((prev) => ({ ...prev, start_time: '' }));
-        setSelectedSlotId(null);
-        console.log('🔄 Reset slot selection due to date change');
-        
-        const photographerId = selectedPhotographerId || currentPackage.photographer;
-        loadTimeSlots(value, photographerId);
-      } else {
-        setFormData((prev) => ({ ...prev, start_time: '' }));
-        setTimeSlots([]);
-        setSelectedSlotId(null);
-      }
-    }
-
-    if (name === 'start_time' && value) {
-      // Find the selected slot and store its ID
-      const selectedSlot = timeSlots.find(slot => slot.start_time === value);
-      if (selectedSlot) {
-        setSelectedSlotId(selectedSlot.id);
-        console.log('🕐 Selected slot:', {
-          id: selectedSlot.id,
-          start_time: selectedSlot.start_time,
-          end_time: selectedSlot.end_time
-        });
-      } else {
-        console.warn('⚠️ Could not find slot for start_time:', value);
-        setSelectedSlotId(null);
-      }
-    }
-
-    // Reset slot selection when start_time is cleared
-    if (name === 'start_time' && !value) {
-      setSelectedSlotId(null);
-      console.log('🔄 Cleared slot selection');
+      setFormErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
   const validateForm = () => {
     const errors = {};
-    
-    if (!formData.package) {
-      errors.package = 'Please select a package';
+    if (!formData.package || isNaN(parseInt(formData.package, 10))) {
+      errors.package = 'Please select a valid package';
     }
-    
-    if (!formData.date) {
-      errors.date = 'Please select a date';
-    }
-    
-    if (!formData.start_time) {
-      errors.start_time = 'Please select a time slot';
+    if (!formData.session_date) {
+      errors.session_date = 'Please select a date';
     } else {
-      // Verify start_time is valid and we have slot ID
-      const selectedSlot = timeSlots.find(slot => slot.start_time === formData.start_time);
-      if (!selectedSlot) {
-        errors.start_time = 'Selected time slot is not available';
-      } else if (!selectedSlotId) {
-        errors.start_time = 'Invalid time slot selection';
+      const sessionDate = new Date(formData.session_date);
+      if (isNaN(sessionDate.getTime()) || sessionDate < new Date().setHours(0, 0, 0, 0)) {
+        errors.session_date = 'Please select a future date';
       }
     }
-    
-    if (!formData.location.trim()) {
-      errors.location = 'Please enter a location';
+    if (!formData.session_time) {
+      errors.session_time = 'Please select a time';
     }
-    
-    if (!selectedPhotographerId) {
-      errors.photographer = 'No photographer selected';
+    if (!formData.status) {
+      errors.status = 'Please select a status';
     }
-    
-    // Additional validation for slot ID
-    if (formData.start_time && !selectedSlotId) {
-      errors.start_time = 'Time slot ID is missing. Please reselect the time slot.';
-    }
-    
     return errors;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('=== FORM SUBMISSION ===');
-
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
-      console.log('❌ Validation failed:', errors);
       setFormErrors(errors);
+      console.log('Form Validation Errors:', errors); // Debug: Log validation errors
       return;
     }
 
     try {
       setSubmitting(true);
       const selectedPackage = packages.find((pkg) => pkg.id === parseInt(formData.package, 10));
-      
-      if (!selectedPackage || !selectedPhotographerId || !selectedSlotId) {
-        console.log('❌ Missing required data:', {
-          selectedPackage: !!selectedPackage,
-          selectedPhotographerId: !!selectedPhotographerId,
-          selectedSlotId: !!selectedSlotId
-        });
-        setFormErrors({ general: 'Invalid package, photographer, or time slot selected.' });
-        return;
+      if (!selectedPackage) {
+        throw new Error('Invalid package selected');
       }
-
-      // Create payload that matches the updated serializer and view expectations
       const payload = {
-        client: client.id, // Include client ID for authenticated bookings
-        photographer: selectedPhotographerId,
-        package: parseInt(formData.package, 10),
-        date: formData.date,
-        start_time: formData.start_time,
-        location: formData.location.trim(),
+        client: client.id,
+        service_package: parseInt(formData.package, 10),
+        session_date: formData.session_date,
+        session_time: formData.session_time,
+        status: formData.status.toLowerCase(),
         notes: formData.notes.trim() || '',
-        slot_id: selectedSlotId, // CRITICAL: Include slot_id as expected by the view
-        time_slot_id: selectedSlotId, // Alternative field name in case backend expects this
+        package_price: Number(selectedPackage.price) || 0
       };
-
-      console.log('📤 Submitting booking payload:', payload);
+      console.log('Booking Payload:', payload); // Debug: Log payload
 
       const response = await apiFetch(`/bookings/bookings/`, {
         method: 'POST',
@@ -310,64 +191,90 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
         body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Booking created successfully:', result);
-        
-        // Reload bookings and close form
-        await loadClientBookings();
-        closeBookingForm();
-        
-        // Show success message (you can add a toast notification here)
-        alert('Booking created successfully!');
-        
-      } else {
-        // Read the response body once and handle both JSON and text
-        const responseText = await response.text();
-        let errorData;
-        
-        try {
-          // Try to parse as JSON first
-          errorData = JSON.parse(responseText);
-        } catch (jsonError) {
-          // If JSON parsing fails, treat as plain text
-          errorData = { message: responseText || 'Unknown server error' };
-        }
-        
-        console.error('❌ Booking creation failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          payload // Log the payload for debugging
-        });
+      const responseData = await response.json();
+      console.log('Create Booking Response:', responseData); // Debug: Log response
 
-        // Handle different types of error responses
-        if (typeof errorData === 'string') {
-          setFormErrors({ general: errorData });
-        } else if (Array.isArray(errorData)) {
-          setFormErrors({ general: errorData[0] || 'Failed to create booking.' });
-        } else if (errorData.non_field_errors) {
-          setFormErrors({ general: errorData.non_field_errors[0] || 'Failed to create booking.' });
-        } else if (errorData.detail) {
-          setFormErrors({ general: errorData.detail });
-        } else if (errorData.message) {
-          setFormErrors({ general: errorData.message });
+      if (!response.ok) {
+        let errorMessage = 'Failed to create booking';
+        if (responseData.detail) {
+          errorMessage = responseData.detail;
+        } else if (responseData.non_field_errors) {
+          errorMessage = responseData.non_field_errors[0];
         } else {
-          // Handle field-specific errors
           const fieldErrors = {};
-          Object.keys(errorData).forEach(key => {
-            if (Array.isArray(errorData[key])) {
-              fieldErrors[key] = errorData[key][0];
-            } else {
-              fieldErrors[key] = errorData[key];
-            }
+          Object.keys(responseData).forEach((key) => {
+            fieldErrors[key] = Array.isArray(responseData[key]) ? responseData[key][0] : responseData[key];
           });
-          setFormErrors(Object.keys(fieldErrors).length ? fieldErrors : { general: 'Failed to create booking.' });
+          if (fieldErrors.photographer) {
+            fieldErrors.general = fieldErrors.photographer.includes('not associated')
+              ? 'You must be registered as a photographer to create bookings.'
+              : fieldErrors.photographer;
+          }
+          setFormErrors(fieldErrors);
+          console.log('Field-specific Errors:', fieldErrors); // Debug: Log field errors
+          return;
         }
+        throw new Error(errorMessage);
       }
+
+      alert('Booking created successfully');
+      await loadClientBookings();
+      closeBookingForm();
     } catch (err) {
-      console.error('❌ Error creating booking:', err);
-      setFormErrors({ general: 'Failed to create booking. Please try again.' });
+      setFormErrors({ general: err.message || 'Failed to create booking' });
+      console.error('Error Creating Booking:', err); // Debug: Log error
+      alert(err.message || 'Failed to create booking');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const closeBookingForm = () => {
+    setShowBookingForm(false);
+    setFormData({ package: '', session_date: '', session_time: '', status: 'pending', notes: '' });
+    setFormErrors({});
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleUpdateBooking = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      const payload = {
+        status: editFormData.status.toLowerCase()
+      };
+      console.log('Update Booking Payload:', payload); // Debug: Log payload
+
+      const response = await apiFetch(`/bookings/bookings/${editingBooking.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseData = await response.json();
+      console.log('Update Booking Response:', responseData); // Debug: Log response
+
+      if (!response.ok) {
+        throw new Error(responseData.message || `Failed to update booking status to ${editFormData.status}`);
+      }
+
+      alert('Booking updated successfully');
+      await loadClientBookings();
+      setEditingBooking(null);
+      setEditFormData({ status: 'pending' });
+    } catch (err) {
+      setFormErrors({ general: err.message || 'Failed to update booking' });
+      console.error('Error Updating Booking:', err); // Debug: Log error
+      alert(err.message || 'Failed to update booking');
     } finally {
       setSubmitting(false);
     }
@@ -381,60 +288,34 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
     }
   };
 
-  const formatTimeSlot = (slot) => {
-    if (slot.start_time && slot.end_time) {
-      return `${slot.start_time} - ${slot.end_time}`;
-    }
-    return slot.start_time || 'Time slot';
-  };
-
-  const closeBookingForm = () => {
-    console.log('🔒 Closing booking form');
-    setShowBookingForm(false);
-    setFormData({ package: '', date: '', start_time: '', location: '', notes: '' });
-    setFormErrors({});
-    setTimeSlots([]);
-    setSelectedPhotographerId(null);
-    setSelectedSlotId(null);
-  };
-
-  // Enhanced validation for submit button
-  const isSubmitDisabled = submitting || 
-    !formData.package || 
-    !formData.date || 
-    !formData.start_time || 
-    !formData.location.trim() || 
-    !selectedPhotographerId || 
-    !selectedSlotId;
-
   return (
-    <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
+    <div className="space-y-6 px-4 sm:px-6">
       {/* Client Detail Header */}
       <div className="flex items-center gap-4">
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm sm:text-base"
         >
-          <ChevronRight className="w-4 h-4 rotate-180" />
+          <ChevronRightIcon className="w-4 h-4 rotate-180" />
           Back to Clients
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-              <User className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600" />
+            <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <UserIcon className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{client.name}</h1>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-600">
                 <span className="flex items-center gap-1 truncate">
-                  <Mail className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                  <MailIcon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                   <span className="truncate">{client.email}</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                  <PhoneIcon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                   {client.phone || 'N/A'}
                 </span>
               </div>
@@ -445,14 +326,14 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
               onClick={() => onEdit(client)}
               className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex-1 sm:flex-none justify-center"
             >
-              <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <PencilIcon className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Edit</span>
             </button>
             <button
               onClick={() => setShowBookingForm(true)}
-              className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex-1 sm:flex-none justify-center"
+              className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex-1 sm:flex-none justify-center"
             >
-              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <PlusIcon className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Create Booking</span>
               <span className="sm:hidden">Book</span>
             </button>
@@ -461,12 +342,12 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
               disabled={!client.phone}
               className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm rounded-lg flex-1 sm:flex-none justify-center ${
                 client.phone
-                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
               title={!client.phone ? 'Phone number not available' : 'Send WhatsApp message'}
             >
-              <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+              <PhoneIcon className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Send Message</span>
               <span className="sm:hidden">Message</span>
             </button>
@@ -474,7 +355,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
         </div>
         
         {client.notes && (
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <h3 className="font-medium text-gray-900 mb-1 text-sm sm:text-base">Notes</h3>
             <p className="text-gray-700 text-sm sm:text-base">{client.notes}</p>
           </div>
@@ -485,7 +366,7 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
       {showBookingForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-100 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="bg-white rounded-lg p-4 sm:p-6">
+            <div className="bg-white rounded-lg p-4 sm:p-6 border border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg sm:text-xl font-bold text-gray-900">Create New Booking</h2>
                 <button 
@@ -493,39 +374,33 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
                   className="text-gray-600 hover:text-gray-900"
                   disabled={submitting}
                 >
-                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <XIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
               
-              {/* Debug info in development */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
-                  <div>Selected Photographer ID: {selectedPhotographerId || 'None'}</div>
-                  <div>Selected Slot ID: {selectedSlotId || 'None'}</div>
-                  <div>Available Slots: {timeSlots.length}</div>
-                </div>
-              )}
-              
               <form onSubmit={handleSubmit} className="space-y-4">
+                {formErrors.general && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-2">
+                    <p className="text-red-700 text-sm">{formErrors.general}</p>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Package</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Package *</label>
                   <select
                     name="package"
                     value={formData.package}
                     onChange={handleInputChange}
-                    disabled={submitting}
-                    className="w-full rounded-md border-gray-300 shadow-sm text-gray-900 focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 text-sm sm:text-base disabled:bg-gray-100"
+                    disabled={submitting || loadingPackages}
+                    className={`w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base ${
+                      formErrors.package ? 'border-red-500' : 'border-gray-300'
+                    } disabled:bg-gray-100 disabled:cursor-not-allowed`}
                   >
-                    <option value="">Select a package</option>
-                    {loadingPackages ? (
-                      <option>Loading packages...</option>
-                    ) : (
-                      packages.map((pkg) => (
-                        <option key={pkg.id} value={pkg.id}>
-                          {pkg.title} - ${parseFloat(pkg.price).toFixed(2)} ({pkg.duration_minutes} min)
-                        </option>
-                      ))
-                    )}
+                    <option value="">{loadingPackages ? 'Loading packages...' : 'Select a package'}</option>
+                    {packages.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.title} - ${formatCurrency(pkg.price)} ({pkg.duration} min)
+                      </option>
+                    ))}
                   </select>
                   {formErrors.package && (
                     <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.package}</p>
@@ -533,105 +408,93 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Session Date *</label>
                   <input
                     type="date"
-                    name="date"
-                    value={formData.date}
+                    name="session_date"
+                    value={formData.session_date}
                     onChange={handleInputChange}
                     disabled={submitting}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full rounded-md border-gray-300 shadow-sm text-gray-900 focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 text-sm sm:text-base disabled:bg-gray-100"
+                    className={`w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base ${
+                      formErrors.session_date ? 'border-red-500' : 'border-gray-300'
+                    } disabled:bg-gray-100`}
                   />
-                  {formErrors.date && (
-                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.date}</p>
+                  {formErrors.session_date && (
+                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.session_date}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot</label>
-                  <select
-                    name="start_time"
-                    value={formData.start_time}
-                    onChange={handleInputChange}
-                    disabled={submitting || !formData.package || !formData.date}
-                    className="w-full rounded-md border-gray-300 shadow-sm text-gray-900 focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm sm:text-base"
-                  >
-                    <option value="">
-                      {!formData.package || !formData.date 
-                        ? 'Select package and date first' 
-                        : loadingTimeSlots
-                        ? 'Loading time slots...'
-                        : timeSlots.length === 0
-                        ? 'No available time slots'
-                        : 'Select a time slot'
-                      }
-                    </option>
-                    {!loadingTimeSlots && timeSlots.map((slot) => (
-                      <option key={slot.id} value={slot.start_time}>
-                        {formatTimeSlot(slot)}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.start_time && (
-                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.start_time}</p>
-                  )}
-                  {formData.package && formData.date && !loadingTimeSlots && timeSlots.length === 0 && (
-                    <p className="text-amber-600 text-xs sm:text-sm mt-1">
-                      No available time slots for the selected date and package. Please choose a different date or package.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Session Time *</label>
                   <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
+                    type="time"
+                    name="session_time"
+                    value={formData.session_time}
                     onChange={handleInputChange}
                     disabled={submitting}
-                    placeholder="Enter shoot location"
-                    className="w-full rounded-md border-gray-300 shadow-sm text-gray-900 focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 text-sm sm:text-base disabled:bg-gray-100"
+                    className={`w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base ${
+                      formErrors.session_time ? 'border-red-500' : 'border-gray-300'
+                    } disabled:bg-gray-100`}
                   />
-                  {formErrors.location && (
-                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.location}</p>
+                  {formErrors.session_time && (
+                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.session_time}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    disabled={submitting}
+                    className={`w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base ${
+                      formErrors.status ? 'border-red-500' : 'border-gray-300'
+                    } disabled:bg-gray-100`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  {formErrors.status && (
+                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.status}</p>
                   )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea
+                  <input
+                    type="text"
                     name="notes"
                     value={formData.notes}
                     onChange={handleInputChange}
                     disabled={submitting}
-                    placeholder="Any special requirements or notes..."
-                    className="w-full rounded-md border-gray-300 shadow-sm text-gray-900 focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 text-sm sm:text-base disabled:bg-gray-100"
-                    rows="3"
+                    placeholder="Enter any notes (e.g., location)"
+                    className={`w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base ${
+                      formErrors.notes ? 'border-red-500' : 'border-gray-300'
+                    } disabled:bg-gray-100`}
                   />
+                  {formErrors.notes && (
+                    <p className="text-red-600 text-xs sm:text-sm mt-1">{formErrors.notes}</p>
+                  )}
                 </div>
-
-                {formErrors.general && (
-                  <p className="text-red-600 text-xs sm:text-sm">{formErrors.general}</p>
-                )}
 
                 <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={closeBookingForm}
                     disabled={submitting}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm sm:text-base order-2 sm:order-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitDisabled}
-                    className={`px-4 py-2 text-sm sm:text-base order-1 sm:order-2 rounded-lg ${
-                      isSubmitDisabled
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    disabled={submitting}
+                    className={`px-4 py-2 text-sm sm:text-base rounded-lg ${
+                      submitting ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'
                     }`}
                   >
                     {submitting ? 'Creating...' : 'Create Booking'}
@@ -643,53 +506,60 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
         </div>
       )}
 
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700 text-sm">{error}</p>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
+        <div className="bg-indigo-100 p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-            <span className="text-blue-600 font-medium text-sm sm:text-base">Total Bookings</span>
+            <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <span className="text-indigo-600 font-medium text-sm sm:text-base">Total Bookings</span>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{client.total_bookings || 0}</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{clientStats.total_bookings}</p>
         </div>
         
-        <div className="bg-green-50 p-4 rounded-lg">
+        <div className="bg-indigo-100 p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-            <span className="text-green-600 font-medium text-sm sm:text-base">Total Spent</span>
+            <CurrencyDollarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <span className="text-indigo-600 font-medium text-sm sm:text-base">Total Spent</span>
           </div>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-            ${(client.total_spent || 0).toLocaleString()}
+            ${formatCurrency(clientStats.total_spent)}
           </p>
         </div>
         
-        <div className="bg-purple-50 p-4 rounded-lg">
+        <div className="bg-indigo-100 p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
-            <span className="text-purple-600 font-medium text-sm sm:text-base">Last Booking</span>
+            <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <span className="text-indigo-600 font-medium text-sm sm:text-base">Last Booking</span>
           </div>
           <p className="text-base sm:text-lg font-bold text-gray-900 mt-1">
-            {client.last_booking_date ? 
-              new Date(client.last_booking_date).toLocaleDateString() : 
-              'Never'
+            {clientStats.last_booking_date && isValid(new Date(clientStats.last_booking_date))
+              ? format(new Date(clientStats.last_booking_date), 'MM/dd/yyyy')
+              : 'Never'
             }
           </p>
         </div>
       </div>
 
       {/* Booking History */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow border border-gray-200">
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <h2 className="text-base sm:text-lg font-medium text-gray-900">Booking History</h2>
         </div>
         
         {loadingBookings ? (
           <div className="p-8 flex justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
           </div>
         ) : bookings.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <CalendarIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
             <p className="text-sm sm:text-base">No bookings found</p>
           </div>
         ) : (
@@ -701,32 +571,75 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Package</th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {bookings.map((booking) => (
                   <tr key={booking.id}>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                      {new Date(booking.date || booking.booking_date).toLocaleDateString()}
+                      {booking.session_date && isValid(new Date(booking.session_date))
+                        ? format(new Date(booking.session_date), 'MM/dd/yyyy')
+                        : 'N/A'}
                     </td>
                     <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900">
-                      <div className="max-w-xs truncate" title={booking.package_name || 'N/A'}>
-                        {booking.package_name || 'N/A'}
+                      <div
+                        className="max-w-xs truncate"
+                        title={
+                          typeof booking.service_package === 'object'
+                            ? booking.service_package?.title || 'N/A'
+                            : booking.service_package || 'N/A'
+                        }
+                      >
+                        {typeof booking.service_package === 'object'
+                          ? booking.service_package?.title || 'N/A'
+                          : booking.service_package || 'N/A'}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        booking.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                        booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        booking.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          booking.status === 'confirmed'
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : booking.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : booking.status === 'cancelled'
+                            ? 'bg-red-100 text-red-800'
+                            : booking.status === 'completed'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
                         {booking.status || 'unknown'}
                       </span>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                      ${(booking.total_price || 0).toLocaleString()}
+                      ${formatCurrency(booking.package_price)}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            console.log('Selected Booking:', booking); // Debug: Log selected booking
+                            setSelectedBooking(booking);
+                          }}
+                          className="text-indigo-600 hover:text-indigo-800"
+                          title="View Details"
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            console.log('Editing Booking:', booking); // Debug: Log editing booking
+                            setEditingBooking(booking);
+                            setEditFormData({ status: booking.status });
+                          }}
+                          className="text-indigo-600 hover:text-indigo-800"
+                          title="Edit Booking"
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -735,6 +648,117 @@ const ClientDetail = ({ client, onBack, onEdit, onCreateBooking }) => {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {selectedBooking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-lg w-full border border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Booking Details</h2>
+              <button
+                onClick={() => {
+                  console.log('Closing Preview Modal'); // Debug: Log modal close
+                  setSelectedBooking(null);
+                }}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <p>
+                <strong>Date:</strong>{' '}
+                {selectedBooking.session_date && isValid(new Date(selectedBooking.session_date))
+                  ? format(new Date(selectedBooking.session_date), 'MM/dd/yyyy')
+                  : 'N/A'}
+              </p>
+              <p>
+                <strong>Time:</strong> {selectedBooking.session_time || 'N/A'}
+              </p>
+              <p>
+                <strong>Package:</strong>{' '}
+                {typeof selectedBooking.service_package === 'object'
+                  ? selectedBooking.service_package?.title || 'N/A'
+                  : selectedBooking.service_package || 'N/A'}
+              </p>
+              <p>
+                <strong>Status:</strong> {selectedBooking.status || 'unknown'}
+              </p>
+              <p>
+                <strong>Price:</strong> ${formatCurrency(selectedBooking.package_price)}
+              </p>
+              <p>
+                <strong>Notes:</strong> {selectedBooking.notes || 'N/A'}
+              </p>
+              <p>
+                <strong>Location:</strong> {selectedBooking.location || 'N/A'}
+              </p>
+              <p>
+                <strong>Client:</strong> {selectedBooking.client || 'N/A'}
+              </p>
+              <p>
+                <strong>Photographer:</strong> {selectedBooking.photographer || 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingBooking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-lg w-full border border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Edit Booking</h2>
+              <button
+                onClick={() => {
+                  console.log('Closing Edit Modal'); // Debug: Log modal close
+                  setEditingBooking(null);
+                }}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateBooking} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
+                <select
+                  name="status"
+                  value={editFormData.status}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border-gray-300 text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingBooking(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm sm:text-base"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`px-4 py-2 text-sm sm:text-base rounded-lg ${
+                    submitting
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  {submitting ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

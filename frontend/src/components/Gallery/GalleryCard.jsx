@@ -1,34 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
-
-// Mock implementations for demo
-const useAuth = () => ({ isAuthenticated: true });
-const useApi = () => ({ 
-  apiFetch: async (url, options) => {
-    console.log('API call:', url, options);
-    return { 
-      ok: true, 
-      json: () => Promise.resolve({ 
-        visibility: options?.body ? JSON.parse(options.body).visibility : 'private',
-        is_shareable_via_link: options?.body ? JSON.parse(options.body).is_shareable_via_link : false,
-        share_url: 'abc123',
-        public_selection_url: 'def456'
-      })
-    };
-  }
-});
-const buildGalleryUrl = (slug, shareUrl) => `https://gallery.com/${slug}/${shareUrl}`;
+import buildGalleryUrl from "../../utils/buildUrl";
+import { useAuth } from "../../AuthContext";
 
 // Custom dropdown component
 const Dropdown = ({ trigger, children, isOpen, onToggle }) => {
   const dropdownRef = useRef(null);
   const menuRef = useRef(null);
 
+
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && 
-          !dropdownRef.current.contains(event.target) && 
-          menuRef.current && 
-          !menuRef.current.contains(event.target)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target) &&
+        menuRef.current &&
+        !menuRef.current.contains(event.target)
+      ) {
         onToggle(false);
       }
     };
@@ -40,17 +27,17 @@ const Dropdown = ({ trigger, children, isOpen, onToggle }) => {
   }, [isOpen, onToggle]);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative z-50" ref={dropdownRef}>
       {React.cloneElement(trigger, {
         onClick: (e) => {
           e.stopPropagation();
           onToggle(!isOpen);
-        }
+        },
       })}
       {isOpen && (
-        <div 
+        <div
           ref={menuRef}
-          className="absolute right-0 top-full mt-2 w-48 bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 text-white rounded-lg shadow-xl z-50 divide-y divide-slate-700/30"
+          className="absolute right-0 top-full mt-2 w-32 bg-slate-800/95 backdrop-blur-md border border-slate-600/50 rounded-lg shadow-2xl divide-y divide-slate-700/30 z-50"
         >
           {children}
         </div>
@@ -118,17 +105,24 @@ const GalleryCard = ({
     visibility: "private",
     is_shareable_via_link: false,
     share_url: "",
-    can_share: true
+    can_share: true,
   },
   onClick,
   onEdit,
   onDelete,
   onAddPhotos,
   onSubGalleryCreated,
+  canEdit,
+  isSelected,
+  onToggleSelection,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  viewMode,
+  theme,
 }) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState(gallery?.title || "Untitled");
-  const [loadingSubGallery, setLoadingSubGallery] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [visibility, setVisibility] = useState(gallery?.visibility || "private");
   const [isShareableViaLink, setIsShareableViaLink] = useState(gallery?.is_shareable_via_link || false);
@@ -137,8 +131,7 @@ const GalleryCard = ({
   const [selectionShareUrl, setSelectionShareUrl] = useState("");
   const [updating, setUpdating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
-  const { apiFetch } = useApi();
+  const { apiFetch } = useAuth();
   const fullUrl = buildGalleryUrl(gallery.slug, selectionShareUrl);
   const fullShareUrl = buildGalleryUrl(gallery.slug, shareUrl);
 
@@ -163,7 +156,6 @@ const GalleryCard = ({
     const title = prompt("Enter sub-gallery name:");
     if (!title) return;
 
-    setLoadingSubGallery(true);
     try {
       const response = await apiFetch("/gallery/galleries/create/", {
         method: "POST",
@@ -178,8 +170,6 @@ const GalleryCard = ({
     } catch (err) {
       console.error("Error creating sub-gallery:", err);
       alert("Failed to create sub-gallery.");
-    } finally {
-      setLoadingSubGallery(false);
     }
   };
 
@@ -187,11 +177,16 @@ const GalleryCard = ({
     if (
       e.target.closest("[data-menu]") ||
       e.target.closest("[data-button]") ||
-      e.target.closest("[data-rename]")
+      e.target.closest("[data-rename]") ||
+      isRenaming
     ) {
       return;
     }
-    onClick?.(gallery);
+    if (e.ctrlKey || e.metaKey) {
+      onToggleSelection?.();
+    } else {
+      onClick?.(gallery);
+    }
   };
 
   const handleDelete = () => {
@@ -253,8 +248,8 @@ const GalleryCard = ({
       }
       const data = await response.json();
       setIsSelectionMode(enabled);
-      setIsShareableViaLink(false); // Ensure shareable link is disabled
-      setShareUrl(""); // Clear share URL
+      setIsShareableViaLink(false);
+      setShareUrl("");
       setSelectionShareUrl(enabled && data.public_selection_url ? data.public_selection_url : "");
       if (enabled && data.public_selection_url) {
         setShowShareModal(true);
@@ -270,8 +265,8 @@ const GalleryCard = ({
 
   const handleShareLinkToggle = (enabled) => {
     setIsShareableViaLink(enabled);
-    setIsSelectionMode(false); // Ensure selection mode is disabled
-    setSelectionShareUrl(""); // Clear selection URL
+    setIsSelectionMode(false);
+    setSelectionShareUrl("");
     handleUpdateSharing(visibility, enabled, false);
     if (enabled) {
       setShowShareModal(true);
@@ -349,13 +344,13 @@ const GalleryCard = ({
 
   const getStatusIcon = () => {
     if (visibility === "public") {
-      return <GlobeIcon className="h-4 w-4 text-emerald-400" />;
+      return <GlobeIcon className="h-2 w-2 text-emerald-400" />;
     } else if (isShareableViaLink) {
-      return <ShareIcon className="h-4 w-4 text-blue-400" />;
+      return <ShareIcon className="h-2 w-2 text-blue-400" />;
     } else if (isSelectionMode) {
-      return <ViewGridIcon className="h-4 w-4 text-amber-400" />;
+      return <ViewGridIcon className="h-2 w-2 text-amber-400" />;
     } else {
-      return <LockClosedIcon className="h-4 w-4 text-slate-400" />;
+      return <LockClosedIcon className="h-2 w-2 text-slate-400" />;
     }
   };
 
@@ -363,27 +358,39 @@ const GalleryCard = ({
 
   const MenuItem = ({ onClick, icon: Icon, children, className = "", dangerous = false }) => (
     <button
+      data-button
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      className={`flex items-center w-full px-3 py-2 text-sm text-left transition-colors duration-200 hover:bg-slate-700/50 ${
+      className={`flex items-center w-full px-3 py-1 text-sm text-left transition-colors duration-200 hover:bg-slate-600/50 ${
         dangerous ? "text-red-400 hover:text-red-300" : "text-slate-200 hover:text-white"
       } ${className}`}
     >
-      <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
-      <span className="font-medium">{children}</span>
+      <Icon className="w-3 h-3 mr-2 flex-shrink-0" />
+      <span className="text-[10px]">{children}</span>
     </button>
   );
 
   return (
     <>
       <div
-        className="relative group bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden shadow-md border border-slate-700/40 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] w-full max-w-sm mx-auto"
+        className={`relative group bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-700/50 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02] w-full max-w-sm mx-auto ${
+          isSelected ? "ring-2 ring-indigo-500" : ""
+        } ${viewMode === "list" ? "flex items-center" : ""}`}
         onClick={handleCardClick}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
       >
         {/* Image Container */}
-        <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-slate-700 to-slate-800 overflow-hidden">
+        <div
+          className={`relative ${
+            viewMode === "list"
+              ? "w-24 h-24 flex-shrink-0"
+              : "w-full aspect-[4/3]"
+          } bg-gradient-to-br from-slate-700 to-slate-800 overflow-hidden`}
+        >
           {gallery?.cover_photo ? (
             <img
               src={gallery.cover_photo}
@@ -396,11 +403,11 @@ const GalleryCard = ({
               <FolderIcon className="h-12 w-12 text-slate-400 opacity-50" />
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           
           {/* Status Badge */}
-          <div className="absolute top-2 left-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/40 backdrop-blur-sm rounded-full border border-white/10 text-xs text-white font-medium">
+          <div className="absolute top-2 left-2 z-10">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full border border-white/20 text-xs text-white font-medium">
               {getStatusIcon()}
               <span>{visibility === "public" ? "Public" : isShareableViaLink ? "Shared" : isSelectionMode ? "Selection" : "Private"}</span>
             </div>
@@ -408,16 +415,35 @@ const GalleryCard = ({
 
           {/* Sub-gallery Badge */}
           {gallery?.parent_gallery && (
-            <div className="absolute bottom-2 left-2">
-              <div className="px-2 py-0.5 bg-blue-500/80 rounded-md text-xs font-medium text-white border border-blue-400/30">
+            <div className="absolute bottom-2 left-2 z-10">
+              <div className="px-2 py-0.5 bg-indigo-600/80 rounded-md text-xs font-medium text-white border border-indigo-500/30">
                 Sub-Gallery
               </div>
+            </div>
+          )}
+
+          {/* Selection Checkbox (Visible in List View or Selection Mode) */}
+          {(viewMode === "list" || isSelected) && (
+            <div className="absolute top-2 right-2 z-10">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onToggleSelection?.();
+                }}
+                className="w-2 h-2 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
             </div>
           )}
         </div>
 
         {/* Content Area */}
-        <div className="p-4 bg-slate-800/90 text-white">
+        <div
+          className={`p-4 bg-slate-800/90 text-white flex-1 ${
+            viewMode === "list" ? "flex items-center justify-between" : ""
+          }`}
+        >
           {isRenaming ? (
             <input
               data-rename
@@ -427,7 +453,7 @@ const GalleryCard = ({
               onBlur={handleRenameSubmit}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="w-full px-2 py-1 bg-slate-700/50 text-white rounded-md border border-slate-600/50 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              className="w-full px-2 py-1 bg-slate-700/50 text-white rounded-md border border-slate-600/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               onClick={(e) => e.stopPropagation()}
               placeholder="Enter gallery name..."
             />
@@ -442,39 +468,78 @@ const GalleryCard = ({
         </div>
 
         {/* Menu Button */}
-        <div data-menu className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
+        <div
+          data-menu
+          className={`absolute top-2 right-2 z-50 ${
+            viewMode === "list" ? "flex items-center" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+          } transition-opacity duration-300`}
+        >
           <Dropdown
             isOpen={isMenuOpen}
             onToggle={setIsMenuOpen}
             trigger={
-              <button className="p-1.5 bg-black/40 backdrop-blur-sm rounded-full hover:bg-black/60 border border-white/10">
+              <button
+                data-button
+                className="p-1.5 bg-black/60 backdrop-blur-sm rounded-full hover:bg-black/80 border border-white/20"
+              >
                 <DotsVerticalIcon className="h-4 w-4 text-white" />
               </button>
             }
           >
             <div className="p-1">
               <MenuItem onClick={handleDownloadGallery} icon={DownloadIcon}>Download</MenuItem>
+              {/* {canEdit && (
+                <MenuItem onClick={handleCreateSubGallery} icon={FolderIcon}>
+                  Create Sub-Gallery
+                </MenuItem>
+              )} */}
             </div>
             {canManageSharing && (
               <>
                 <div className="p-1">
-                  <MenuItem onClick={() => { setIsMenuOpen(false); setIsRenaming(true); }} icon={() => (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  )}>
+                  <MenuItem
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsRenaming(true);
+                    }}
+                    icon={() => (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                    )}
+                  >
                     Rename
                   </MenuItem>
-                  <MenuItem onClick={() => { setIsMenuOpen(false); setShowShareModal(true); }} icon={ShareIcon}>
+                  <MenuItem
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setShowShareModal(true);
+                    }}
+                    icon={ShareIcon}
+                  >
                     Share Options
                   </MenuItem>
                 </div>
                 <div className="p-1">
-                  <MenuItem onClick={handleDelete} icon={() => (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  )} dangerous>
+                  <MenuItem
+                    onClick={handleDelete}
+                    icon={() => (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    )}
+                    dangerous
+                  >
                     Delete
                   </MenuItem>
                 </div>
@@ -486,8 +551,8 @@ const GalleryCard = ({
 
       {/* Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg w-full max-w-md p-6 border border-slate-700/30 shadow-lg">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl w-full max-w-md p-6 border border-slate-600/30 shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Share Settings</h3>
@@ -495,7 +560,7 @@ const GalleryCard = ({
               </div>
               <button
                 onClick={() => setShowShareModal(false)}
-                className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-md"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-600/50 rounded-full transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -508,7 +573,11 @@ const GalleryCard = ({
               <div>
                 <label className="block text-sm font-medium text-white mb-3">Visibility</label>
                 <div className="space-y-3">
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
+                  <label
+                    className={`flex items-center p-3 rounded-lg border border-slate-600/50 hover:bg-slate-600/30 cursor-pointer transition-all duration-200 ${
+                      visibility === "private" ? "bg-slate-600/30" : ""
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="visibility"
@@ -516,7 +585,7 @@ const GalleryCard = ({
                       checked={visibility === "private"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 mr-3 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="flex items-center flex-1">
                       <LockClosedIcon className="h-4 w-4 text-slate-300 mr-2" />
@@ -526,7 +595,11 @@ const GalleryCard = ({
                       </div>
                     </div>
                   </label>
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer transition-colors">
+                  <label
+                    className={`flex items-center p-3 rounded-lg border border-slate-600/50 hover:bg-slate-600/30 cursor-pointer transition-all duration-200 ${
+                      visibility === "public" ? "bg-slate-600/30" : ""
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="visibility"
@@ -534,7 +607,7 @@ const GalleryCard = ({
                       checked={visibility === "public"}
                       onChange={(e) => handleVisibilityChange(e.target.value)}
                       disabled={updating}
-                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 mr-3 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="flex items-center flex-1">
                       <GlobeIcon className="h-4 w-4 text-emerald-400 mr-2" />
@@ -548,16 +621,20 @@ const GalleryCard = ({
               </div>
 
               {/* Sharing Options */}
-              <div className="border-t border-slate-700/40 pt-4">
+              <div className="border-t border-slate-600/40 pt-4">
                 <label className="block text-sm font-medium text-white mb-3">Sharing Options</label>
                 <div className="space-y-3">
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
+                  <label
+                    className={`flex items-center p-3 rounded-lg border border-slate-600/50 hover:bg-slate-600/30 cursor-pointer transition-all duration-200 ${
+                      isShareableViaLink ? "bg-slate-600/30" : ""
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={isShareableViaLink}
                       onChange={(e) => handleShareLinkToggle(e.target.checked)}
                       disabled={updating || isSelectionMode}
-                      className="w-4 h-4 mr-3 text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 mr-3 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="flex items-center flex-1">
                       <ShareIcon className="h-4 w-4 text-blue-400 mr-2" />
@@ -567,7 +644,11 @@ const GalleryCard = ({
                       </div>
                     </div>
                   </label>
-                  <label className="flex items-center p-3 rounded-md border border-slate-600/50 hover:bg-slate-700/30 cursor-pointer">
+                  <label
+                    className={`flex items-center p-3 rounded-lg border border-slate-600/50 hover:bg-slate-600/30 cursor-pointer transition-all duration-200 ${
+                      isSelectionMode ? "bg-slate-600/30" : ""
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={isSelectionMode}
@@ -588,7 +669,7 @@ const GalleryCard = ({
 
               {/* Share Links */}
               {(shareUrl && isShareableViaLink) || (isSelectionMode && selectionShareUrl) ? (
-                <div className="border-t border-slate-700/40 pt-4">
+                <div className="border-t border-slate-600/40 pt-4">
                   <label className="block text-sm font-medium text-white mb-3">Links</label>
                   {shareUrl && isShareableViaLink && (
                     <div className="flex items-center gap-2 mb-3">
@@ -596,11 +677,11 @@ const GalleryCard = ({
                         type="text"
                         value={fullShareUrl}
                         readOnly
-                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-xs font-mono"
+                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-lg border border-slate-600/50 text-xs font-mono focus:outline-none"
                       />
                       <button
                         onClick={() => copyShareUrl(gallery.slug, shareUrl)}
-                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
+                        className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white transition-colors"
                         title="Copy Link"
                       >
                         <ClipboardCopyIcon className="h-4 w-4" />
@@ -613,11 +694,11 @@ const GalleryCard = ({
                         type="text"
                         value={fullUrl}
                         readOnly
-                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-md border border-slate-600/50 text-xs font-mono"
+                        className="flex-1 p-2 bg-slate-700/50 text-white rounded-lg border border-slate-600/50 text-xs font-mono focus:outline-none"
                       />
                       <button
                         onClick={() => copyShareUrl(gallery.slug, selectionShareUrl)}
-                        className="p-2 bg-amber-600 hover:bg-amber-700 rounded-md text-white"
+                        className="p-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-white transition-colors"
                         title="Copy Selection Link"
                       >
                         <ClipboardCopyIcon className="h-4 w-4" />
@@ -630,16 +711,16 @@ const GalleryCard = ({
               {/* Loading State */}
               {updating && (
                 <div className="text-center py-4">
-                  <div className="w-6 h-6 mx-auto animate-spin border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                  <div className="w-6 h-6 mx-auto animate-spin border-2 border-indigo-400 border-t-transparent rounded-full"></div>
                   <p className="text-xs text-slate-400 mt-2">Updating...</p>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="border-t border-slate-700/40 pt-4">
+              <div className="border-t border-slate-600/40 pt-4">
                 <button
                   onClick={() => setShowShareModal(false)}
-                  className="w-full py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-md text-sm"
+                  className="w-full py-2.5 bg-slate-700/50 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   Done
                 </button>

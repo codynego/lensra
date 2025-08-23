@@ -1,12 +1,42 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Edit2, Trash2, Calendar, DollarSign, User, Eye, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useApi } from '../../useApi';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  Search,
+  Plus,
+  Edit3,
+  Trash2,
+  Calendar,
+  DollarSign,
+  Users,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  SortAsc,
+  Phone,
+  Mail,
+  MapPin,
+  TrendingUp,
+  Activity,
+  Star,
+  X,
+  Menu,
+  List,
+  Grid
+} from 'lucide-react';
+import { useAuth } from '../../AuthContext';
 
-const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
-  const { apiFetch } = useApi();
-  const navigate = useNavigate();
-  const apiFetchRef = useRef(apiFetch); // Cache apiFetch to avoid re-renders
+// Utility function for currency formatting
+const formatCurrency = (value) => {
+  const num = Number(value);
+  return isNaN(num) ? '0.00' : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'light' }) => {
+  // Assume these are passed as props or from context
+  const { apiFetch, authState } = useAuth();
+
+
+  const apiFetchRef = useRef(apiFetch);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,442 +44,636 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient }) => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10); // Matches backend PAGE_SIZE
+  const [pageSize] = useState(12);
   const [totalCount, setTotalCount] = useState(0);
-  const [userStats, setUserStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
+  const debounceTimeout = useRef(null);
 
-  // Update apiFetchRef when apiFetch changes
+  // Update apiFetchRef
   useEffect(() => {
-    console.log('Updating apiFetchRef');
     apiFetchRef.current = apiFetch;
   }, [apiFetch]);
 
-  // Fetch user stats to check plan limits
-  async function loadUserStats() {
-    let isMounted = true;
+  // Fetch clients
+  const loadClients = useCallback(async () => {
     try {
-      console.log('Fetching /subscriptions/me/stats/');
-      setStatsLoading(true);
-      const response = await apiFetchRef.current('/subscriptions/me/stats/');
-      if (!response || !response.ok) {
-        throw new Error('Failed to fetch user stats');
-      }
-      const data = await response.json();
-      if (isMounted) {
-        setUserStats(data);
-      }
-    } catch (err) {
-      console.error('Error loading user stats:', err);
-      // Don't set error for stats failure - component should still work
-    } finally {
-      if (isMounted) {
-        setStatsLoading(false);
-      }
-    }
-  }
-
-  // Fetch clients with pagination
-  async function loadClients() {
-    let isMounted = true;
-    try {
-      console.log(`Fetching /photographers/clients/?page=${currentPage}&page_size=${pageSize}`);
       setLoading(true);
       setError(null);
-      const response = await apiFetchRef.current(`/photographers/clients/?page=${currentPage}&page_size=${pageSize}`);
-      if (!response || !response.ok) {
-        throw new Error('Failed to load clients');
+      const response = await apiFetchRef.current(
+        `/photographers/clients/?page=${currentPage}&page_size=${pageSize}&search=${encodeURIComponent(searchTerm)}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load clients: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      if (isMounted) {
-        setClients(data.results || []);
-        setTotalCount(data.count || 0);
-      }
+      console.log('API Response (loadClients):', data); // Debug: Log raw API response
+      const normalizedClients = data.results.map(client => ({
+        ...client,
+        total_bookings: Number(client.total_bookings) || 0,
+        total_spent: Number(client.total_spent) || 0,
+        last_booking_date: client.last_booking_date || null,
+      }));
+      console.log('Normalized Clients:', normalizedClients); // Debug: Log processed clients
+      setClients(normalizedClients);
+      setTotalCount(data.count || 0);
     } catch (err) {
-      if (isMounted) {
-        setError('Failed to load clients');
-        console.error('Error loading clients:', err);
-      }
+      setError('Failed to load clients');
+      console.error('Error loading clients:', err);
     } finally {
-      if (isMounted) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }
+  }, [currentPage, pageSize, searchTerm]);
 
-  // Fetch stats and clients separately
+  // Load clients on mount, pagination, or search change
   useEffect(() => {
-    loadUserStats();
-  }, []); // Run once on mount
+    if (authState.isAuthenticated) {
+      loadClients();
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    };
+  }, [authState.isAuthenticated, loadClients]);
 
-  useEffect(() => {
-    loadClients();
-  }, [currentPage, pageSize]); // Run when pagination changes
+  // Debounced search handler
+  const handleSearchChange = useCallback((e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(() => {
+      setCurrentPage(1);
+      loadClients();
+    }, 300);
+  }, [loadClients]);
 
-  async function handleDeleteClient(id) {
-    if (window.confirm('Are you sure you want to delete this client?')) {
+  // Delete client
+  const handleDeleteClient = useCallback(async (id) => {
+    if (window.confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
       try {
-        console.log(`Deleting /photographers/clients/${id}/`);
         const response = await apiFetchRef.current(`/photographers/clients/${id}/`, {
           method: 'DELETE',
         });
-        if (!response || !response.ok) {
-          throw new Error(`Failed to delete client: ${response?.status || 'No response'}`);
+        console.log('Delete Client Response:', response); // Debug: Log response
+        if (!response.ok) {
+          throw new Error(`Failed to delete client: ${response.status} ${response.statusText}`);
         }
-        await loadClients(); // Refresh the client list
-        await loadUserStats(); // Refresh stats after deletion
+        await loadClients();
       } catch (err) {
-        alert('Failed to delete client');
+        setError('Failed to delete client');
         console.error('Error deleting client:', err);
+        alert('Failed to delete client');
       }
     }
-  }
+  }, [loadClients]);
 
-  function handleCreateClientClick() {
-    if (userStats && userStats.plan_limits) {
-      const maxClients = userStats.plan_limits.max_clients_count;
-      const currentClients = userStats.clients_count || 0;
-      if (maxClients !== -1 && currentClients >= maxClients) {
-        console.log('Client limit reached, navigating to /upgrade');
-        navigate('/upgrade');
-        return;
-      }
-    }
-    console.log('Creating new client');
-    onCreateClient();
-  }
-
-  const filteredAndSortedClients = clients
-    .filter(client => {
-      const matchesSearch = client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           client.email?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterStatus === 'all' ||
-                           (filterStatus === 'active' && (client.total_bookings > 0)) ||
-                           (filterStatus === 'inactive' && (client.total_bookings === 0));
-      return matchesSearch && matchesFilter;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'bookings':
-          return (b.total_bookings || 0) - (a.total_bookings || 0);
-        case 'spent':
-          return (b.total_spent || 0) - (a.total_spent || 0);
-        case 'lastBooking':
-          return new Date(b.last_booking_date || 0) - new Date(a.last_booking_date || 0);
-        default:
-          return 0;
-      }
-    });
-
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  function handlePageChange(newPage) {
+  // Pagination
+  const handlePageChange = useCallback((newPage) => {
+    const totalPages = Math.ceil(totalCount / pageSize);
     if (newPage >= 1 && newPage <= totalPages) {
-      console.log('Changing page to:', newPage);
       setCurrentPage(newPage);
     }
-  }
+  }, [totalCount, pageSize]);
 
-  function isAtClientLimit() {
-    if (!userStats || !userStats.plan_limits) return false;
-    const maxClients = userStats.plan_limits.max_clients_count;
-    const currentClients = userStats.clients_count || 0;
-    return maxClients !== -1 && currentClients >= maxClients;
-  }
+  // Memoized filtered and sorted clients
+  const filteredAndSortedClients = useMemo(() => {
+    const filtered = clients
+      .filter(client => {
+        const matchesSearch = client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             client.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = filterStatus === 'all' ||
+                             (filterStatus === 'active' && (client.total_bookings || 0) > 0) ||
+                             (filterStatus === 'inactive' && (client.total_bookings || 0) === 0);
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'name':
+            return (a.name || '').localeCompare(b.name || '');
+          case 'bookings':
+            return (b.total_bookings || 0) - (a.total_bookings || 0);
+          case 'spent':
+            return (b.total_spent || 0) - (a.total_spent || 0);
+          case 'lastBooking':
+            return new Date(b.last_booking_date || '1970-01-01') - new Date(a.last_booking_date || '1970-01-01');
+          default:
+            return 0;
+        }
+      });
+    console.log('Filtered and Sorted Clients:', filtered); // Debug: Log filtered clients
+    return filtered;
+  }, [clients, searchTerm, filterStatus, sortBy]);
 
-  function getClientUsageInfo() {
-    if (!userStats || !userStats.plan_limits) return { percentage: 0, color: '#10B981', isAtLimit: false };
-    const maxClients = userStats.plan_limits.max_clients_count;
-    const currentClients = userStats.clients_count || 0;
-    if (maxClients === -1) return { percentage: 0, color: '#10B981', isAtLimit: false };
-    const percentage = (currentClients / maxClients) * 100;
-    const isAtLimit = currentClients >= maxClients;
-    let color = '#10B981'; // green
-    if (percentage >= 100) color = '#EF4444'; // red
-    else if (percentage >= 80) color = '#F59E0B'; // yellow
-    return { percentage, color, isAtLimit };
-  }
+  // Calculate stats
+  const stats = useMemo(() => {
+    const totalRevenue = clients.reduce((sum, client) => sum + (Number(client.total_spent) || 0), 0);
+    const activeClients = clients.filter(c => (c.total_bookings || 0) > 0).length;
+    const avgRevenuePerClient = clients.length > 0 ? totalRevenue / clients.length : 0;
 
-  const formatLimit = (limit) => {
-    if (limit === -1) return '∞';
-    return limit.toLocaleString();
-  };
+    console.log('Stats:', { totalClients: totalCount, totalRevenue, activeClients, avgRevenuePerClient }); // Debug: Log stats
+    return {
+      totalClients: totalCount,
+      totalRevenue,
+      activeClients,
+      avgRevenuePerClient,
+    };
+  }, [clients, totalCount]);
 
-  if (loading) {
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const isDark = theme === 'dark';
+
+  // Loading state
+  if (authState.loading || loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className={`min-h-screen p-4 md:p-6 lg:p-8 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="flex justify-between items-center">
+              <div className={`h-8 w-32 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
+              <div className={`h-10 w-32 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className={`h-24 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm`}></div>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className={`h-12 flex-1 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}></div>
+              <div className={`h-12 w-32 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className={`h-48 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm`}></div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 m-4">
-        <p className="text-red-800">{error}</p>
-        <button 
-          onClick={loadClients}
-          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Retry
-        </button>
+      <div className={`min-h-screen p-4 md:p-6 lg:p-8 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className="max-w-2xl mx-auto">
+          <div className={`rounded-2xl p-8 text-center ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-red-200'}`}>
+            <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${isDark ? 'bg-red-900/20' : 'bg-red-50'}`}>
+              <X className={`w-8 h-8 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
+            </div>
+            <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Something went wrong</h3>
+            <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{error}</p>
+            <button
+              onClick={loadClients}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md hover:shadow-lg focus:ring-4 focus:ring-indigo-500/20"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const clientUsage = getClientUsageInfo();
-
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-        
-        <div className="flex items-center gap-4">
-          {userStats && userStats.plan_limits && userStats.plan_limits.max_clients_count !== -1 && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>
-                {userStats.clients_count || 0} / {formatLimit(userStats.plan_limits.max_clients_count)} clients
-              </span>
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div
-                  className="h-2 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${Math.min(clientUsage.percentage, 100)}%`,
-                    backgroundColor: clientUsage.color,
-                  }}
-                />
+    <div className={`min-h-screen p-4 md:p-6 lg:p-8 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className={`text-2xl md:text-3xl lg:text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Clients
+            </h1>
+            <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Manage your client relationships and bookings
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`lg:hidden flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-600 hover:bg-gray-50 shadow-sm border border-gray-200'
+              }`}
+              aria-label="Toggle filters"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+            </button>
+            <button
+              onClick={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-600 hover:bg-gray-50 shadow-sm border border-gray-200'
+              }`}
+              aria-label={`Switch to ${viewMode === 'grid' ? 'table' : 'grid'} view`}
+            >
+              {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+              {viewMode === 'grid' ? 'Table' : 'Grid'}
+            </button>
+            <button
+              onClick={onCreateClient}
+              className="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-indigo-500/20"
+              aria-label="Add new client"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Client</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              icon: Users,
+              label: 'Total Clients',
+              value: stats.totalClients.toLocaleString(),
+              change: '+12%',
+              trend: 'up',
+              color: 'indigo',
+            },
+            {
+              icon: DollarSign,
+              label: 'Total Revenue',
+              value: `$${formatCurrency(stats.totalRevenue)}`,
+              change: '+18%',
+              trend: 'up',
+              color: 'green',
+            },
+            {
+              icon: Activity,
+              label: 'Active Clients',
+              value: stats.activeClients.toLocaleString(),
+              change: '+5%',
+              trend: 'up',
+              color: 'blue',
+            },
+            {
+              icon: TrendingUp,
+              label: 'Avg per Client',
+              value: `$${formatCurrency(stats.avgRevenuePerClient)}`,
+              change: '+8%',
+              trend: 'up',
+              color: 'purple',
+            },
+          ].map((stat, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-2xl p-6 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-sm border border-gray-100'} hover:shadow-lg transition-all duration-200`}>
+              <div className="flex items-center justify-between">
+                <div className={`p-3 rounded-xl ${
+                  stat.color === 'indigo' ? (isDark ? 'bg-indigo-900/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600') :
+                  stat.color === 'green' ? (isDark ? 'bg-green-900/20 text-green-400' : 'bg-green-50 text-green-600') :
+                  stat.color === 'blue' ? (isDark ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600') :
+                  (isDark ? 'bg-purple-900/20 text-purple-400' : 'bg-purple-50 text-purple-600')
+                }`}>
+                  <stat.icon className="w-6 h-6" />
+                </div>
+                <div className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-green-900/20 text-green-400' : 'bg-green-50 text-green-600'}`}>
+                  {stat.change}
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {stat.value}
+                </div>
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {stat.label}
+                </div>
               </div>
             </div>
-          )}
-          
-          <button
-            onClick={handleCreateClientClick}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-              isAtClientLimit()
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {isAtClientLimit() ? (
-              <>
-                <Zap className="w-4 h-4" />
-                Upgrade Plan
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Add Client
-              </>
-            )}
-          </button>
+          ))}
         </div>
-      </div>
 
-      {isAtClientLimit() && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-center gap-2">
-            <div className="flex-shrink-0">
-              <Zap className="w-5 h-5 text-amber-600" />
+        {/* Search and Filters */}
+        <div className={`${showFilters ? 'block' : 'hidden lg:block'}`}>
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className={`absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-400' : 'text-gray-400'}`} />
+              <input
+                type="text"
+                placeholder="Search clients by name, email, or phone..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className={`pl-12 pr-4 py-3 w-full rounded-lg text-sm font-medium transition-all duration-200 focus:ring-4 ${
+                  isDark ? 'bg-gray-800 border border-gray-700 text-white placeholder-gray-400 focus:border-indigo-500 focus:ring-indigo-500/20' : 'bg-white border border-gray-200 text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-indigo-500/20 shadow-sm'
+                }`}
+                aria-label="Search clients"
+              />
             </div>
-            <div>
-              <p className="text-amber-800 font-medium">Client limit reached</p>
-              <p className="text-amber-700 text-sm mt-1">
-                You've reached your plan's limit of {formatLimit(userStats.plan_limits.max_clients_count)} clients. 
-                <button
-                  onClick={() => navigate('/upgrade')}
-                  className="underline hover:no-underline ml-1"
-                >
-                  Upgrade your plan
-                </button>
-                {' '}to add more clients.
-              </p>
+            <div className="flex gap-3">
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-4 ${
+                  isDark ? 'bg-gray-800 border border-gray-700 text-white focus:border-indigo-500 focus:ring-indigo-500/20' : 'bg-white border border-gray-200 text-gray-900 focus:border-indigo-500 focus:ring-indigo-500/20 shadow-sm'
+                }`}
+                aria-label="Filter by status"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-4 ${
+                  isDark ? 'bg-gray-800 border border-gray-700 text-white focus:border-indigo-500 focus:ring-indigo-500/20' : 'bg-white border border-gray-200 text-gray-900 focus:border-indigo-500 focus:ring-indigo-500/20 shadow-sm'
+                }`}
+                aria-label="Sort by"
+              >
+                <option value="name">Sort by Name</option>
+                <option value="bookings">Sort by Bookings</option>
+                <option value="spent">Sort by Revenue</option>
+                <option value="lastBooking">Sort by Last Booking</option>
+              </select>
             </div>
           </div>
         </div>
-      )}
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search clients..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
-          />
-        </div>
-        
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-        >
-          <option value="all">All Clients</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-        >
-          <option value="name">Sort by Name</option>
-          <option value="bookings">Sort by Bookings</option>
-          <option value="spent">Sort by Amount Spent</option>
-          <option value="lastBooking">Sort by Last Booking</option>
-        </select>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2">
-            <User className="w-5 h-5 text-blue-600" />
-            <span className="text-blue-600 font-medium">Total Clients</span>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
-            {userStats && userStats.plan_limits && userStats.plan_limits.max_clients_count !== -1 && (
-              <span className="text-sm text-gray-500">
-                / {formatLimit(userStats.plan_limits.max_clients_count)}
-              </span>
-            )}
-          </div>
-        </div>
-        
-        <div className="bg-green-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-600" />
-            <span className="text-green-600 font-medium">Total Revenue</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            ${clients.reduce((sum, client) => sum + (client.total_spent || 0), 0).toLocaleString()}
-          </p>
-        </div>
-        
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-purple-600" />
-            <span className="text-purple-600 font-medium">Active Clients</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            {clients.filter(c => (c.total_bookings || 0) > 0).length}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+        {/* Client Content */}
         {filteredAndSortedClients.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No clients found</p>
+          <div className={`text-center py-16 rounded-2xl ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-sm'}`}>
+            <div className={`w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <Users className={`w-10 h-10 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+            </div>
+            <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              No clients found
+            </h3>
+            <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {searchTerm || filterStatus !== 'all' ? 'Try adjusting your search or filter criteria.' : 'Get started by adding your first client.'}
+            </p>
+            {(!searchTerm && filterStatus === 'all') && (
+              <button
+                onClick={onCreateClient}
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md hover:shadow-lg focus:ring-4 focus:ring-indigo-500/20"
+                aria-label="Add first client"
+              >
+                Add Your First Client
+              </button>
+            )}
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bookings</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Spent</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Booking</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredAndSortedClients.map((client) => (
-                    <tr key={client.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                              <User className="w-5 h-5 text-gray-600" />
-                            </div>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{client.name || 'N/A'}</div>
-                            <div className="text-sm text-gray-500">
-                              {client.notes && client.notes.length > 50 
-                                ? `${client.notes.substring(0, 50)}...` 
-                                : client.notes || 'No notes'}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{client.email || 'N/A'}</div>
-                        <div className="text-sm text-gray-500">{client.phone || 'N/A'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {client.total_bookings || 0} bookings
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${(client.total_spent || 0).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {client.last_booking_date ? 
-                          new Date(client.last_booking_date).toLocaleDateString() : 
-                          'Never'
-                        }
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAndSortedClients.map((client) => (
+                  <div
+                    key={client.id}
+                    className={`group relative overflow-hidden rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] ${
+                      isDark ? 'bg-gray-800 border border-gray-700 hover:bg-gray-750 hover:shadow-2xl' : 'bg-white shadow-sm hover:shadow-xl border border-gray-100'
+                    }`}
+                    role="article"
+                    aria-labelledby={`client-${client.id}-name`}
+                  >
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-lg ${
+                        client.total_bookings > 5 ? 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white' :
+                        client.total_bookings > 0 ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' :
+                        isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {client.name ? client.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'NA'}
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => onSelectClient(client)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => onEditClient(client)}
-                            className="text-yellow-600 hover:text-yellow-900"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClient(client.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <h3 id={`client-${client.id}-name`} className={`font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {client.name || 'Unnamed Client'}
+                          </h3>
+                          {client.total_bookings > 5 && (
+                            <Star className="w-4 h-4 text-yellow-500 fill-current" aria-label="VIP Client" />
+                          )}
                         </div>
-                      </td>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {client.total_bookings || 0} booking{(client.total_bookings || 0) !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 mb-4">
+                      {client.email && (
+                        <div className="flex items-center gap-3">
+                          <Mail className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                          <span className={`text-sm truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={client.email}>
+                            {client.email}
+                          </span>
+                        </div>
+                      )}
+                      {client.phone && (
+                        <div className="flex items-center gap-3">
+                          <Phone className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                          <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                            {client.phone}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className={`text-center p-3 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                        <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          ${formatCurrency(client.total_spent)}
+                        </div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Total Spent
+                        </div>
+                      </div>
+                      <div className={`text-center p-3 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                        <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {client.last_booking_date && new Date(client.last_booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Africa/Lagos' })}
+                        </div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Last Booking
+                        </div>
+                      </div>
+                    </div>
+                    {client.notes && (
+                      <div className={`text-sm mb-4 p-3 rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                        <p className={`line-clamp-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={client.notes}>
+                          {client.notes}
+                        </p>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          console.log('Selected Client:', client); // Debug: Log selected client
+                          onSelectClient(client);
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                          isDark ? 'bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                        }`}
+                        aria-label={`View details for ${client.name || 'Unnamed Client'}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => {
+                          console.log('Editing Client:', client); // Debug: Log editing client
+                          onEditClient(client);
+                        }}
+                        className={`p-2.5 rounded-lg transition-all duration-200 ${
+                          isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        aria-label={`Edit ${client.name || 'Unnamed Client'}`}
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClient(client.id)}
+                        className={`p-2.5 rounded-lg transition-all duration-200 ${
+                          isDark ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-red-50 text-red-600 hover:bg-red-100'
+                        }`}
+                        aria-label={`Delete ${client.name || 'Unnamed Client'}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                  <thead className={`${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                    <tr>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Phone</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Bookings</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Total Spent</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Last Booking</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-between px-6 py-4 bg-gray-50">
-              <div className="text-sm text-gray-700">
-                Showing {filteredAndSortedClients.length} of {totalCount} clients
+                  </thead>
+                  <tbody className={`divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                    {filteredAndSortedClients.map((client) => (
+                      <tr key={client.id}>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {client.name || 'Unnamed Client'}
+                            </span>
+                            {client.total_bookings > 5 && (
+                              <Star className="w-4 h-4 text-yellow-500 fill-current" aria-label="VIP Client" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 truncate max-w-xs" title={client.email}>
+                          {client.email || 'N/A'}
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {client.phone || 'N/A'}
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {client.total_bookings || 0}
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          ${formatCurrency(client.total_spent)}
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {client.last_booking_date && new Date(client.last_booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Africa/Lagos' })}
+                        </td>
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                console.log('Selected Client:', client); // Debug: Log selected client
+                                onSelectClient(client);
+                              }}
+                              className={`text-indigo-600 hover:text-indigo-800 ${isDark ? 'hover:text-indigo-400' : ''}`}
+                              aria-label={`View details for ${client.name || 'Unnamed Client'}`}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                console.log('Editing Client:', client); // Debug: Log editing client
+                                onEditClient(client);
+                              }}
+                              className={`text-gray-600 hover:text-gray-800 ${isDark ? 'text-gray-300 hover:text-gray-100' : ''}`}
+                              aria-label={`Edit ${client.name || 'Unnamed Client'}`}
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClient(client.id)}
+                              className={`text-red-600 hover:text-red-800 ${isDark ? 'text-red-400 hover:text-red-300' : ''}`}
+                              aria-label={`Delete ${client.name || 'Unnamed Client'}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <span className="text-sm text-gray-700">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 p-6 rounded-2xl ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-sm'}`}>
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Showing <span className="font-medium">{((currentPage - 1) * pageSize) + 1}</span> to{' '}
+                  <span className="font-medium">{Math.min(currentPage * pageSize, totalCount)}</span> of{' '}
+                  <span className="font-medium">{totalCount}</span> clients
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:hover:bg-gray-100'
+                    }`}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            currentPage === pageNum
+                              ? 'bg-indigo-600 text-white shadow-lg'
+                              : isDark ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-300' : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          aria-label={`Go to page ${pageNum}`}
+                          aria-current={currentPage === pageNum ? 'page' : undefined}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:hover:bg-gray-100'
+                    }`}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
       </div>
