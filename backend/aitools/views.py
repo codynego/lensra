@@ -12,14 +12,14 @@ from django.conf import settings
 
 
 
-from rest_framework import generics
-from .models import EnhancedImage
-from .serializers import EnhancedImageSerializer
-from io import BytesIO
+# from rest_framework import generics
+# from .models import EnhancedImage
+# from .serializers import EnhancedImageSerializer
+# from io import BytesIO
 
 
 # Import RealESRGAN (ncnn or normal)
-from realesrgan import RealESRGAN
+# from realesrgan import RealESRGAN
 
 MODEL_PATH = r"C:/Users/Shina/Downloads/u2net.onnx"
 session = new_session(model_path=MODEL_PATH)
@@ -56,26 +56,26 @@ class BackgroundRemovalView(APIView):
 
 
 
-class EnhanceImageView(generics.CreateAPIView):
-    queryset = EnhancedImage.objects.all()
-    serializer_class = EnhancedImageSerializer
+# class EnhanceImageView(generics.CreateAPIView):
+#     queryset = EnhancedImage.objects.all()
+#     serializer_class = EnhancedImageSerializer
 
-    def perform_create(self, serializer):
-        instance = serializer.save()  # save original first
+#     def perform_create(self, serializer):
+#         instance = serializer.save()  # save original first
 
-        # Open uploaded image
-        input_path = instance.original.path
-        img = Image.open(input_path).convert("RGB")
+#         # Open uploaded image
+#         input_path = instance.original.path
+#         img = Image.open(input_path).convert("RGB")
 
-        # Load RealESRGAN model
-        model = RealESRGAN(settings.BASE_DIR, scale=4)
-        model.load_weights("RealESRGAN_x4plus.pth", download=True)  # auto-download
+#         # Load RealESRGAN model
+#         model = RealESRGAN(settings.BASE_DIR, scale=4)
+#         model.load_weights("RealESRGAN_x4plus.pth", download=True)  # auto-download
 
-        # Enhance image
-        sr_img = model.predict(img)
+#         # Enhance image
+#         sr_img = model.predict(img)
 
-        # Save to memory
-        buffer = BytesIO()
-        sr_img.save(buffer, format="PNG")
-        file_name = f"enhanced_{instance.id}.png"
-        instance.enhanced.save(file_name, ContentFile(buffer.getvalue()), save=True)
+#         # Save to memory
+#         buffer = BytesIO()
+#         sr_img.save(buffer, format="PNG")
+#         file_name = f"enhanced_{instance.id}.png"
+#         instance.enhanced.save(file_name, ContentFile(buffer.getvalue()), save=True)

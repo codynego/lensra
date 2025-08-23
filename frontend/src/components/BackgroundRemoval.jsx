@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Scissors, Upload, X, Download } from 'lucide-react';
+import { Scissors, Upload, X, Download, Sparkles, FileImage } from 'lucide-react';
 import { useAuth } from '../AuthContext'; // Adjust path as needed
 
-const BackgroundRemoval = ({ theme = 'light', onClose }) => {
+const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
   const isDark = theme === 'dark';
   const { apiFetch, authState, upgradePrompt } = useAuth();
   const [file, setFile] = useState(null);
@@ -11,15 +11,23 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessed, setIsProcessed] = useState(false);
   const fileInputRef = useRef(null);
+
+  const maxFileSize = 10 * 1024 * 1024; // 10MB
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
+      if (selectedFile.size > maxFileSize) {
+        setError('Image size exceeds 10MB limit.');
+        return;
+      }
       setFile(selectedFile);
       setPreviewUrl(URL.createObjectURL(selectedFile));
       setResultUrl(null);
       setError(null);
+      setIsProcessed(false);
     }
   };
 
@@ -28,12 +36,17 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile && droppedFile.type.startsWith('image/')) {
+      if (droppedFile.size > maxFileSize) {
+        setError('Image size exceeds 10MB limit.');
+        return;
+      }
       setFile(droppedFile);
       setPreviewUrl(URL.createObjectURL(droppedFile));
       setResultUrl(null);
       setError(null);
+      setIsProcessed(false);
     } else {
-      setError('Please drop a valid image file (PNG, JPEG)');
+      setError('Please drop a valid image file (PNG, JPEG, WebP).');
     }
   };
 
@@ -42,8 +55,9 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
     setPreviewUrl(null);
     setResultUrl(null);
     setError(null);
+    setIsProcessed(false);
     if (fileInputRef.current) {
-      fileInputRef.current.value = null;
+      fileInputRef.current.value = '';
     }
   };
 
@@ -69,9 +83,15 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
       });
 
       const data = await response.json();
-      console.log('API response:', data);
+      console.log('API response:', data); // Debug: Inspect the response
       if (response.ok) {
-        setResultUrl(data.output_image);
+        if (data.output_image && (data.output_image.startsWith('http://') || data.output_image.startsWith('https://'))) {
+          setResultUrl(data.output_image);
+          setIsProcessed(true);
+        } else {
+          console.error('Invalid output_image format:', data.output_image);
+          setError('Invalid image URL received from server.');
+        }
       } else {
         setError(data.error || data.detail || 'Failed to process image.');
       }
@@ -83,146 +103,262 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
     }
   };
 
+  const handleDownload = async () => {
+    if (!resultUrl) {
+      setError('No image available to download.');
+      return;
+    }
+
+    try {
+      // Fetch the image as a Blob
+      const response = await fetch(resultUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'image/png',
+        },
+        mode: 'cors', // Ensure CORS is handled
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'lensra_bgremoval.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download error:', err.message);
+      setError('Failed to download image. Please try again or check server access.');
+    }
+  };
+
   return (
     <div
-      className={`rounded-xl p-6 ${
+      className={`min-h-screen p-4 sm:p-6 lg:p-8 transition-all duration-500 ${
         isDark
-          ? 'bg-slate-800/80 backdrop-blur-sm border border-slate-700/50'
-          : 'bg-slate-50/80 backdrop-blur-sm border border-slate-200/50'
-      } max-w-4xl mx-auto`}
+          ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950'
+          : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
+      }`}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <Scissors className="h-4 w-4 text-white" />
-          </div>
-          <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Background Removal
-          </h2>
-        </div>
-        <button
-          onClick={onClose}
-          className={`px-4 py-2 rounded-lg transition-colors font-medium ${
-            isDark
-              ? 'bg-slate-700 hover:bg-slate-600 text-white'
-              : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+      {/* Animated Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div
+          className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-20 animate-pulse ${
+            isDark ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-blue-300 to-purple-300'
           }`}
-        >
-          Back to Dashboard
-        </button>
+        />
+        <div
+          className={`absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full blur-3xl opacity-20 animate-pulse ${
+            isDark ? 'bg-gradient-to-r from-blue-500 to-cyan-500' : 'bg-gradient-to-r from-pink-300 to-orange-300'
+          }`}
+          style={{ animationDelay: '1s' }}
+        />
       </div>
 
-      {/* Error or Upgrade Prompt */}
-      {(error || upgradePrompt?.message) && (
-        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 text-sm">
-          {upgradePrompt?.message || error}
-        </div>
-      )}
-
-      {/* Drag and Drop / File Input */}
-      <div
-        className={`relative h-64 rounded-lg border-2 border-dashed ${
-          isDark ? 'border-slate-600' : 'border-slate-300'
-        } flex items-center justify-center mb-6 transition-all duration-200 ${
-          isDragging ? 'bg-indigo-500/10 border-indigo-500' : ''
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-      >
-        {!previewUrl ? (
-          <div className="text-center">
-            <Upload className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
-            <p className={`text-lg ${isDark ? 'text-white' : 'text-slate-600'}`}>
-              Drag and drop an image or{' '}
-              <label
-                className={`underline cursor-pointer ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
-              >
-                browse
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                  ref={fileInputRef}
-                />
-              </label>
-            </p>
+      <div className="relative z-10 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-600 flex items-center justify-center shadow-lg">
+                <Scissors className="h-6 w-6 text-white" />
+              </div>
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 opacity-20 blur animate-pulse" />
+            </div>
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Background Removal
+              </h1>
+              <p className={`text-sm sm:text-base mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Remove backgrounds with AI precision
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="relative w-full h-full">
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="w-full h-full object-contain rounded-lg"
-            />
-            <button
-              onClick={handleRemoveImage}
-              className="absolute top-2 right-2 p-1 bg-red-500/80 rounded-full hover:bg-red-600 transition-colors"
-            >
-              <X className="w-4 h-4 text-white" />
-            </button>
+          <button
+            onClick={onClose}
+            className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 active:scale-95 ${
+              isDark
+                ? 'bg-slate-800/80 hover:bg-slate-700/80 text-white border border-slate-700/50 backdrop-blur-sm'
+                : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-200/50 backdrop-blur-sm shadow-lg'
+            }`}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+
+        {/* Error or Upgrade Prompt */}
+        {(error || upgradePrompt?.message) && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm">
+            <p className="text-red-400 text-sm font-medium">{upgradePrompt?.message || error}</p>
           </div>
         )}
-      </div>
 
-      {/* Process Button */}
-      {previewUrl && (
-        <button
-          onClick={handleProcessImage}
-          disabled={loading || !authState.isAuthenticated}
-          className={`w-full py-3 rounded-lg font-medium transition-all duration-200 ${
-            loading || !authState.isAuthenticated
-              ? 'bg-slate-600 cursor-not-allowed'
-              : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-indigo-500/30'
-          }`}
-        >
-          {loading ? 'Processing...' : 'Remove Background'}
-        </button>
-      )}
-
-      {/* Result */}
-      {resultUrl && (
-        <div className="mt-6">
-          <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'} mb-4`}>
-            Processed Image
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-600'} mb-2`}>Original</p>
-              <img
-                src={previewUrl}
-                alt="Original"
-                className="w-full h-64 object-contain rounded-lg border ${isDark ? 'border-slate-600' : 'border-slate-200'}"
-              />
-            </div>
-            <div>
-              <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-600'} mb-2`}>Background Removed</p>
-              <img
-                src={resultUrl}
-                alt="Processed"
-                className="w-full h-64 object-contain rounded-lg border ${isDark ? 'border-slate-600' : 'border-slate-200'}"
-              />
-              <a
-                href={resultUrl}
-                download="background_removed.png"
-                className={`mt-2 inline-flex items-center px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  isDark
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white'
-                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white'
-                } shadow-lg hover:shadow-indigo-500/30`}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          {/* Upload Section */}
+          <div className="space-y-6">
+            <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Upload Image
+            </h2>
+            <div
+              className={`relative group transition-all duration-500 ease-out ${
+                isDragging ? 'transform scale-105' : ''
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              <div
+                className={`relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-500 ${
+                  isDragging
+                    ? 'border-indigo-400 bg-indigo-500/5'
+                    : isDark
+                    ? 'border-slate-700 hover:border-slate-600 bg-slate-800/40'
+                    : 'border-slate-300 hover:border-slate-400 bg-slate-50/40'
+                } backdrop-blur-sm`}
               >
-                <Download className="w-4 h-4 mr-2" />
-                Download Image
-              </a>
+                {!previewUrl ? (
+                  <div className="p-12 text-center">
+                    <div
+                      className={`w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                        isDragging
+                          ? 'bg-indigo-500 text-white transform scale-110'
+                          : isDark
+                          ? 'bg-slate-700 text-slate-300 group-hover:bg-slate-600'
+                          : 'bg-slate-200 text-slate-600 group-hover:bg-slate-300'
+                      }`}
+                    >
+                      <Upload className={`w-8 h-8 transition-transform duration-500 ${isDragging ? 'transform scale-110' : ''}`} />
+                    </div>
+                    <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      Drop your image here
+                    </h3>
+                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Supports PNG, JPEG, WebP up to 10MB
+                    </p>
+                    <label
+                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium rounded-xl cursor-pointer transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
+                    >
+                      <FileImage className="w-4 h-4 mr-2" />
+                      Browse Files
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileChange}
+                        ref={fileInputRef}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="relative group">
+                    <div className="aspect-square max-h-96 overflow-hidden">
+                      <img
+                        src={previewUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    <button
+                      onClick={handleRemoveImage}
+                      className="absolute top-4 right-4 p-2 bg-red-500/80 hover:bg-red-600 backdrop-blur-sm rounded-xl transition-all duration-300 transform hover:scale-110 active:scale-95 opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Process Button */}
+            {previewUrl && !isProcessed && (
+              <button
+                onClick={handleProcessImage}
+                disabled={loading || !authState.isAuthenticated}
+                className={`w-full py-4 rounded-xl font-semibold text-lg transition-all duration-500 transform hover:scale-105 active:scale-95 ${
+                  loading || !authState.isAuthenticated
+                    ? 'bg-slate-600 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 hover:from-indigo-600 hover:via-purple-700 hover:to-pink-700 text-white shadow-2xl hover:shadow-indigo-500/30 animate-pulse'
+                }`}
+                style={{ animationDuration: '3s' }}
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Processing Magic...
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-3">
+                    <Sparkles className="w-5 h-5" />
+                    Remove Background
+                  </div>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Result Section */}
+          <div className="space-y-6">
+            <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Result
+            </h2>
+            {!resultUrl ? (
+              <div
+                className={`rounded-2xl border-2 border-dashed p-12 text-center transition-all duration-500 ${
+                  isDark ? 'border-slate-700 bg-slate-800/20' : 'border-slate-300 bg-slate-50/20'
+                } backdrop-blur-sm`}
+              >
+                <div
+                  className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${
+                    isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  <Scissors className="w-8 h-8" />
+                </div>
+                <p className={`text-lg font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Processed image will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative group overflow-hidden rounded-2xl">
+                  <div className="aspect-square max-h-96 overflow-hidden">
+                    <img
+                      src={resultUrl}
+                      alt="Processed"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      style={{
+                        background:
+                          'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
+                        backgroundSize: '16px 16px',
+                        backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                      }}
+                    />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
+                <button
+                  onClick={handleDownload}
+                  disabled={!resultUrl}
+                  className="w-full py-4 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-3"
+                >
+                  <Download className="w-5 h-5" />
+                  Download Result
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
