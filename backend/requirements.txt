@@ -48,3 +48,4 @@ tqdm==4.67.1
 tzdata==2025.2
 tzlocal==5.3.1
 urllib3==2.5.0
+realesrgan

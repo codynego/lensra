@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Scissors, Upload, X } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { Scissors, Upload, X, Download } from 'lucide-react';
+import { useAuth } from '../AuthContext'; // Adjust path as needed
 
 const BackgroundRemoval = ({ theme = 'light', onClose }) => {
   const isDark = theme === 'dark';
@@ -207,6 +207,18 @@ const BackgroundRemoval = ({ theme = 'light', onClose }) => {
                 alt="Processed"
                 className="w-full h-64 object-contain rounded-lg border ${isDark ? 'border-slate-600' : 'border-slate-200'}"
               />
+              <a
+                href={resultUrl}
+                download="background_removed.png"
+                className={`mt-2 inline-flex items-center px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  isDark
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white'
+                } shadow-lg hover:shadow-indigo-500/30`}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download Image
+              </a>
             </div>
           </div>
         </div>
