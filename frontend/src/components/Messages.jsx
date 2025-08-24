@@ -129,8 +129,8 @@ const Messages = () => {
   };
 
   const getParticipantDisplay = (thread) => {
-    const photographerName = thread.photographer?.user?.username || 'Unknown Photographer';
-    const clientName = thread.client?.user?.username || thread.client?.email || 'Unknown Client';
+    const photographerName = thread.photographer?.username || 'Unknown Photographer';
+    const clientName = thread.client?.name || thread.client?.email || 'Unknown Client';
     return `${photographerName} ↔ ${clientName}`;
   };
 
