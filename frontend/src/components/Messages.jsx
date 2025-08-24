@@ -4,6 +4,7 @@ import { format, isValid } from 'date-fns';
 import { useAuth } from '../AuthContext';
 
 const Messages = () => {
+  const { apiFetch } = useAuth();
   const [threads, setThreads] = useState([]);
   const [selectedThread, setSelectedThread] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -12,7 +13,6 @@ const Messages = () => {
   const [error, setError] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const { apiFetch } = useAuth()
 
   // Fetch threads on mount
   useEffect(() => {
@@ -37,6 +37,9 @@ const Messages = () => {
         throw new Error(`Failed to load threads: ${response.status}`);
       }
       const data = await response.json();
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Threads response:', data);
+      }
       setThreads(data);
     } catch (err) {
       setError('Failed to load threads');
@@ -58,6 +61,9 @@ const Messages = () => {
         throw new Error(`Failed to load messages: ${response.status}`);
       }
       const data = await response.json();
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Messages response:', data);
+      }
       setMessages(data);
       // Mark unread messages as read
       data.forEach((msg) => {
@@ -122,6 +128,12 @@ const Messages = () => {
     }
   };
 
+  const getParticipantDisplay = (thread) => {
+    const photographerName = thread.photographer?.user?.username || 'Unknown Photographer';
+    const clientName = thread.client?.user?.username || thread.client?.email || 'Unknown Client';
+    return `${photographerName} ↔ ${clientName}`;
+  };
+
   return (
     <div className="flex flex-col sm:flex-row h-full max-h-[400px] bg-white rounded-lg shadow border border-gray-200">
       {/* Thread List */}
@@ -148,14 +160,21 @@ const Messages = () => {
                 onClick={() => setSelectedThread(thread)}
               >
                 <div className="font-medium text-gray-900">
-                  {thread.participants.join(', ')}
+                  {getParticipantDisplay(thread)}
                 </div>
-                <div className="text-sm text-gray-600 truncate">{thread.last_message || 'No messages'}</div>
+                <div className="text-sm text-gray-600 truncate">
+                  {thread.last_message?.content || 'No messages'}
+                </div>
                 <div className="text-xs text-gray-500">
-                  {thread.last_message_time && isValid(new Date(thread.last_message_time))
-                    ? format(new Date(thread.last_message_time), 'MM/dd/yyyy HH:mm')
+                  {thread.last_message?.created_at && isValid(new Date(thread.last_message.created_at))
+                    ? format(new Date(thread.last_message.created_at), 'MM/dd/yyyy HH:mm')
                     : 'N/A'}
                 </div>
+                {thread.unread_count > 0 && (
+                  <div className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    {thread.unread_count} unread
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -168,7 +187,7 @@ const Messages = () => {
           <>
             <div className="p-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-lg font-medium text-gray-900">
-                {selectedThread.participants.join(', ')}
+                {getParticipantDisplay(selectedThread)}
               </h2>
               <button
                 onClick={() => setSelectedThread(null)}
@@ -190,11 +209,13 @@ const Messages = () => {
                     key={msg.id}
                     className="mb-3 p-3 bg-gray-100 rounded-lg"
                   >
-                    <div className="font-bold text-gray-900 mb-1">{msg.sender || 'Anonymous'}</div>
+                    <div className="font-bold text-gray-900 mb-1">
+                      {msg.sender_name || 'Anonymous'}
+                    </div>
                     <div className="text-gray-700">{msg.content}</div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {msg.timestamp && isValid(new Date(msg.timestamp))
-                        ? format(new Date(msg.timestamp), 'MM/dd/yyyy HH:mm')
+                      {msg.created_at && isValid(new Date(msg.created_at))
+                        ? format(new Date(msg.created_at), 'MM/dd/yyyy HH:mm')
                         : 'N/A'}
                     </div>
                   </div>
