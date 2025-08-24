@@ -8,6 +8,8 @@ const ClientManagement = ({theme}) => {
   const [currentView, setCurrentView] = useState('list');
   const [selectedClient, setSelectedClient] = useState(null);
   const [editingClient, setEditingClient] = useState(null);
+  const { apiFetch, authState, user, checkPlanLimits, upgradePrompt, setUpgradePrompt } = useAuth();
+  const currencySymbol = user?.stats?.currency_symbol || '#';
 
   const handleSelectClient = (client) => {
     setSelectedClient(client);
@@ -61,6 +63,7 @@ const ClientManagement = ({theme}) => {
             onBack={handleBackToList}
             onEdit={handleEditClient}
             onCreateBooking={handleCreateBooking}
+            currencySymbol={currencySymbol}
             theme={theme}
           />
         )}

@@ -14,7 +14,7 @@ import {
   Monitor
 } from "lucide-react";
 
-export default function BrandingSettingsTab({ studio, onSave }) {
+export default function BrandingSettingsTab({ studio, onSave, theme = "dark" }) {
   const [brandColor, setBrandColor] = useState(studio?.brand_color || "#6366f1");
   const [secondaryColor, setSecondaryColor] = useState(studio?.secondary_color || "#8b5cf6");
   const [logo, setLogo] = useState(studio?.logo || null);

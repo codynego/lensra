@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Scissors, Upload, X, Download, Sparkles, FileImage } from 'lucide-react';
-import { useAuth } from '../AuthContext'; // Adjust path as needed
+import { useAuth } from '../AuthContext';
 
-const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
+const BackgroundRemoval = ({ theme = 'dark', onClose, sparksRemaining }) => {
   const isDark = theme === 'dark';
   const { apiFetch, authState, upgradePrompt } = useAuth();
   const [file, setFile] = useState(null);
@@ -20,7 +20,7 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.size > maxFileSize) {
-        setError('Image size exceeds 10MB limit.');
+        setError({ message: 'Image size exceeds 10MB limit.', action: null, url: null });
         return;
       }
       setFile(selectedFile);
@@ -37,7 +37,7 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile && droppedFile.type.startsWith('image/')) {
       if (droppedFile.size > maxFileSize) {
-        setError('Image size exceeds 10MB limit.');
+        setError({ message: 'Image size exceeds 10MB limit.', action: null, url: null });
         return;
       }
       setFile(droppedFile);
@@ -46,7 +46,7 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
       setError(null);
       setIsProcessed(false);
     } else {
-      setError('Please drop a valid image file (PNG, JPEG, WebP).');
+      setError({ message: 'Please drop a valid image file (PNG, JPEG, WebP).', action: null, url: null });
     }
   };
 
@@ -63,11 +63,11 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
 
   const handleProcessImage = async () => {
     if (!authState.isAuthenticated) {
-      setError('Please log in to process images.');
+      setError({ message: 'Please log in to process images.', action: null, url: null });
       return;
     }
     if (!file) {
-      setError('Please select an image first.');
+      setError({ message: 'Please select an image first.', action: null, url: null });
       return;
     }
     setLoading(true);
@@ -83,21 +83,34 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
       });
 
       const data = await response.json();
-      console.log('API response:', data); // Debug: Inspect the response
+      console.log('API response:', data);
       if (response.ok) {
         if (data.output_image && (data.output_image.startsWith('http://') || data.output_image.startsWith('https://'))) {
           setResultUrl(data.output_image);
           setIsProcessed(true);
         } else {
-          console.error('Invalid output_image format:', data.output_image);
-          setError('Invalid image URL received from server.');
+          setError({ message: 'Invalid image URL received from server.', action: null, url: null });
         }
       } else {
-        setError(data.error || data.detail || 'Failed to process image.');
+        if (response.status === 400 || response.status === 402) {
+          setError({
+            message: data.detail || 'Insufficient sparks to perform this task.',
+            action: data.action || 'Please purchase more sparks or upgrade your plan.',
+            url: data.url || 'https://x.ai/subscriptions',
+          });
+        } else if (response.status === 403) {
+          setError({
+            message: data.detail || 'No active subscription found.',
+            action: data.action || 'Please subscribe to use this feature.',
+            url: data.url || 'https://x.ai/subscriptions',
+          });
+        } else {
+          setError({ message: data.detail || 'Failed to process image.', action: null, url: null });
+        }
       }
     } catch (err) {
       console.error('API error:', err);
-      setError('Network error. Please try again.');
+      setError({ message: 'Network error. Please try again.', action: null, url: null });
     } finally {
       setLoading(false);
     }
@@ -105,18 +118,15 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
 
   const handleDownload = async () => {
     if (!resultUrl) {
-      setError('No image available to download.');
+      setError({ message: 'No image available to download.', action: null, url: null });
       return;
     }
 
     try {
-      // Fetch the image as a Blob
       const response = await fetch(resultUrl, {
         method: 'GET',
-        headers: {
-          'Accept': 'image/png',
-        },
-        mode: 'cors', // Ensure CORS is handled
+        headers: { 'Accept': 'image/png' },
+        mode: 'cors',
       });
 
       if (!response.ok) {
@@ -134,7 +144,7 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download error:', err.message);
-      setError('Failed to download image. Please try again or check server access.');
+      setError({ message: 'An error occurred while downloading the image. Please try again.', action: null, url: null });
     }
   };
 
@@ -146,7 +156,6 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
           : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
       }`}
     >
-      {/* Animated Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div
           className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-20 animate-pulse ${
@@ -162,7 +171,6 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -192,15 +200,59 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
           </button>
         </div>
 
-        {/* Error or Upgrade Prompt */}
+        {sparksRemaining === 0 && !error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm">
+            <p className="text-red-400 text-sm font-medium">No sparks available.</p>
+            <p className="text-slate-300 text-sm mt-2">
+              Please purchase more sparks or upgrade your plan.{' '}
+              <a
+                href="https://x.ai/subscriptions"
+                className="text-indigo-400 underline hover:text-indigo-300"
+                aria-label="Upgrade your plan to get more sparks"
+              >
+                Click here to get more sparks
+              </a>
+            </p>
+          </div>
+        )}
+
+        {sparksRemaining !== null && sparksRemaining > 0 && sparksRemaining < 5 && !error && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 backdrop-blur-sm">
+            <p className="text-amber-400 text-sm font-medium">Low sparks: {sparksRemaining} remaining.</p>
+            <p className="text-slate-300 text-sm mt-2">
+              Purchase more sparks to continue using AI tools.{' '}
+              <a
+                href="https://x.ai/subscriptions"
+                className="text-indigo-400 underline hover:text-indigo-300"
+                aria-label="Purchase more sparks"
+              >
+                Get more sparks
+              </a>
+            </p>
+          </div>
+        )}
+
         {(error || upgradePrompt?.message) && (
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm">
-            <p className="text-red-400 text-sm font-medium">{upgradePrompt?.message || error}</p>
+            <p className="text-red-400 text-sm font-medium">{error?.message || upgradePrompt?.message}</p>
+            {(error?.action || upgradePrompt?.action) && (
+              <p className="text-slate-300 text-sm mt-2">
+                {error?.action || upgradePrompt?.action}{' '}
+                {(error?.url || upgradePrompt?.url) && (
+                  <a
+                    href={error?.url || upgradePrompt?.url}
+                    className="text-indigo-400 underline hover:text-indigo-300"
+                    aria-label="Upgrade your plan to get more sparks"
+                  >
+                    Click here to get more sparks
+                  </a>
+                )}
+              </p>
+            )}
           </div>
         )}
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          {/* Upload Section */}
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Upload Image
@@ -279,13 +331,12 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
               </div>
             </div>
 
-            {/* Process Button */}
             {previewUrl && !isProcessed && (
               <button
                 onClick={handleProcessImage}
-                disabled={loading || !authState.isAuthenticated}
+                disabled={loading || !authState.isAuthenticated || sparksRemaining === 0}
                 className={`w-full py-4 rounded-xl font-semibold text-lg transition-all duration-500 transform hover:scale-105 active:scale-95 ${
-                  loading || !authState.isAuthenticated
+                  loading || !authState.isAuthenticated || sparksRemaining === 0
                     ? 'bg-slate-600 cursor-not-allowed'
                     : 'bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 hover:from-indigo-600 hover:via-purple-700 hover:to-pink-700 text-white shadow-2xl hover:shadow-indigo-500/30 animate-pulse'
                 }`}
@@ -306,7 +357,6 @@ const BackgroundRemoval = ({ theme = 'dark', onClose }) => {
             )}
           </div>
 
-          {/* Result Section */}
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Result

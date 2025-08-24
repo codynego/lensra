@@ -199,3 +199,25 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment for Booking #{self.booking.id} - {self.payment_status}"
+
+    def mark_as_paid(self, transaction_id=None):
+        """Update payment as successful"""
+        self.payment_status = self.STATUS_PAID
+        self.paid_at = timezone.now()
+        if transaction_id:
+            self.transaction_id = transaction_id
+        self.save()
+
+    def mark_as_failed(self, reason=None):
+        """Update payment as failed"""
+        self.payment_status = self.STATUS_FAILED
+        self.save()
+
+    def mark_as_refunded(self):
+        """Handle refunds"""
+        self.payment_status = self.STATUS_REFUNDED
+        self.save()
+
+    @property
+    def is_paid(self):
+        return self.payment_status == self.STATUS_PAID

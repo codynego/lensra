@@ -23,6 +23,10 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
 class StatsSerializer(serializers.ModelSerializer):
     plan_limits = serializers.SerializerMethodField()
     plan_name = serializers.SerializerMethodField()
+    max_sparks = serializers.IntegerField(source='user.usersubscription.plan.sparks_per_day', read_only=True)
+    sparks_used = serializers.IntegerField(source='user.usersubscription.sparks_used', read_only=True)
+    sparks_remaining = serializers.IntegerField(source='user.usersubscription.sparks_remaining', read_only=True)
+    currency_symbol = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Stats
@@ -34,6 +38,10 @@ class StatsSerializer(serializers.ModelSerializer):
             "clients_count",
             "plan_limits",
             "plan_name",
+            "currency_symbol",
+            "sparks_used",
+            "max_sparks",
+            "sparks_remaining"
         ]
 
 
@@ -60,3 +68,11 @@ class StatsSerializer(serializers.ModelSerializer):
         except UserSubscription.DoesNotExist:
             return {}
         return {}
+
+    def get_currency_symbol(self, obj):
+        user = self.context["request"].user
+        try:
+            photographer = user.photographer
+            return photographer.currency_symbol
+        except:
+            return "#"

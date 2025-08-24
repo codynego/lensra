@@ -20,7 +20,7 @@ const formatCurrency = (value) => {
   return isNaN(num) ? '0.00' : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const ClientDetail = ({ client, onBack, onEdit }) => {
+const ClientDetail = ({ client, onBack, onEdit, currencySymbol }) => {
   const { apiFetch } = useApi();
   const [bookings, setBookings] = useState([]);
   const [clientStats, setClientStats] = useState({
@@ -74,7 +74,7 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
         status: booking.status ? booking.status.toLowerCase() : 'unknown',
         package_price: Number(booking.package_price) || 0,
       }));
-      console.log('Valid Bookings:', validBookings); // Debug: Log processed bookings
+      console.log('Valid Bookings:', data); // Debug: Log processed bookings
 
       setBookings(validBookings);
 
@@ -89,8 +89,6 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
               ? b.session_date
               : latest, null)
         : null;
-
-      console.log('Client Stats:', { total_bookings, total_spent, last_booking_date }); // Debug: Log stats
       setClientStats({ total_bookings, total_spent, last_booking_date });
     } catch (err) {
       setError('Failed to load bookings');
@@ -398,7 +396,7 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
                     <option value="">{loadingPackages ? 'Loading packages...' : 'Select a package'}</option>
                     {packages.map((pkg) => (
                       <option key={pkg.id} value={pkg.id}>
-                        {pkg.title} - ${formatCurrency(pkg.price)} ({pkg.duration} min)
+                        {pkg.title} - {currencySymbol}{formatCurrency(pkg.price)} ({pkg.duration} min)
                       </option>
                     ))}
                   </select>
@@ -529,7 +527,7 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
             <span className="text-indigo-600 font-medium text-sm sm:text-base">Total Spent</span>
           </div>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-            ${formatCurrency(clientStats.total_spent)}
+            {currencySymbol}{formatCurrency(clientStats.total_spent)}
           </p>
         </div>
         
@@ -614,7 +612,7 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
                       </span>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                      ${formatCurrency(booking.package_price)}
+                      {currencySymbol}{formatCurrency(booking.package_price)}
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                       <div className="flex gap-2">
@@ -685,7 +683,7 @@ const ClientDetail = ({ client, onBack, onEdit }) => {
                 <strong>Status:</strong> {selectedBooking.status || 'unknown'}
               </p>
               <p>
-                <strong>Price:</strong> ${formatCurrency(selectedBooking.package_price)}
+                <strong>Price:</strong> {currencySymbol}{formatCurrency(selectedBooking.package_price)}
               </p>
               <p>
                 <strong>Notes:</strong> {selectedBooking.notes || 'N/A'}

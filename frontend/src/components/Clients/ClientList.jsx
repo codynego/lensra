@@ -46,6 +46,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
   const debounceTimeout = useRef(null);
+  const currencySymbol = user?.stats?.currency_symbol || '#';
 
   // Check if user can create clients
   const { canCreateClient } = user?.stats?.plan_limits
@@ -74,6 +75,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
       }
       const data = await response.json();
       console.log('API Response (loadClients):', data);
+
       const normalizedClients = data.results.map(client => ({
         ...client,
         total_bookings: Number(client.total_bookings) || 0,
@@ -381,7 +383,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
             {
               icon: DollarSign,
               label: 'Total Revenue',
-              value: `$${formatCurrency(stats.totalRevenue)}`,
+              value: `${currencySymbol}${formatCurrency(stats.totalRevenue)}`,
               change: '+18%',
               trend: 'up',
               color: 'green',
@@ -397,7 +399,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
             {
               icon: TrendingUp,
               label: 'Avg per Client',
-              value: `$${formatCurrency(stats.avgRevenuePerClient)}`,
+              value: `${currencySymbol}${formatCurrency(stats.avgRevenuePerClient)}`,
               change: '+8%',
               trend: 'up',
               color: 'purple',
@@ -558,7 +560,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div className={`text-center p-3 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
                         <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          ${formatCurrency(client.total_spent)}
+                          {currencySymbol}{formatCurrency(client.total_spent)}
                         </div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                           Total Spent

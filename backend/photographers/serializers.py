@@ -18,6 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
 class ClientSerializer(serializers.ModelSerializer):
     is_registered = serializers.BooleanField(read_only=True)
     photographer = serializers.StringRelatedField(read_only=True)  # Shows photographer's name
+    currency_symbol = serializers.CharField(source="photographer.currency_symbol", read_only=True)
 
     total_spent = serializers.SerializerMethodField()
     total_bookings = serializers.SerializerMethodField()
@@ -27,7 +28,8 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = [
             "id", "photographer", "user", "name", "email",
             "phone", "address", "notes", "is_registered",
-            "total_spent", "total_bookings", "created_at", 
+            "total_spent", "total_bookings", "created_at",
+            "currency_symbol"
         ]
         read_only_fields = ["created_at", "photographer", "user"]
 
