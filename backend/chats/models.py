@@ -4,19 +4,19 @@ from django.conf import settings
 
 
 class MessageThread(models.Model):
-    photographer = models.ForeignKey(
-        Photographer, on_delete=models.CASCADE, related_name="message_threads"
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_threads"
     )
-    client = models.ForeignKey(
-        Client, on_delete=models.CASCADE, related_name="message_threads"
+    receiver = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_threads"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('photographer', 'client')  # prevents duplicate threads
+        unique_together = ('sender', 'receiver')  # prevents duplicate threads
 
     def __str__(self):
-        return f"Thread: {self.client.email} ↔ {self.photographer.user.username}"
+        return f"Thread: {self.receiver.email} ↔ {self.sender.username}"
 
 
 class Message(models.Model):
