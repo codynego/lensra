@@ -9,6 +9,7 @@ import ClientManagement from './Clients/ClientManagement';
 import PhotographerSetup from './website/PhotographerSetup';
 import Settings from './settings/Settings';
 import AiToolsDashboard from './AiToolsDashboard';
+import Messages from './Messages';
 import { 
   Menu, 
   X, 
@@ -21,7 +22,8 @@ import {
   LogOut,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  MessageCircle
 } from 'lucide-react';
 
 const BRAND_COLOR = '#6366f1';
@@ -68,6 +70,7 @@ const PhotographerDashboard = () => {
 
   const navItems = [
     { id: 'Bookings', label: 'Bookings', icon: Calendar },
+    { id: 'Messages', label: 'Messages', icon: MessageCircle },
     { id: 'Gallery', label: 'Gallery', icon: Camera },
     { id: 'Clients', label: 'Clients', icon: Users },
     { id: 'Studio', label: 'Studio Setup', icon: Palette },
@@ -265,6 +268,7 @@ const PhotographerDashboard = () => {
           <div className="max-w-7xl mx-auto">
             {activeTab === 'Bookings' && <BookingManagement theme={theme} />}
             {activeTab === 'Gallery' && <Gallery theme={theme} />}
+            {activeTab === 'Messages' && <Messages theme={theme} />}
             {activeTab === 'Clients' && <ClientManagement theme={theme} />}
             {activeTab === 'Studio' && <PhotographerSetup theme={theme} />}
             {activeTab === 'AI Tools' && <AiToolsDashboard theme={theme} />}

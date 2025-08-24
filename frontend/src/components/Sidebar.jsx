@@ -30,6 +30,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMenuOpen, closeMenu }) => {
     { label: 'Clients', icon: Users },
     { label: 'Studio', icon: Camera },
     { label: 'Gallery', icon: Image },
+    { label: 'Messages', icon: Sparkles },
     { label: 'AI Tools', icon: Sparkles },
     { label: 'Settings', icon: Settings },
   ];

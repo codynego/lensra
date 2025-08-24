@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'marketing',
     'notification',
     'aitools',
+    'chats',
 ]
 SITE_ID = 1
 

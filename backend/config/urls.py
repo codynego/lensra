@@ -38,6 +38,7 @@ urlpatterns = [
     path("api/marketing/", include("marketing.urls")),
     path("api/notifications/", include("notification.urls")),
     path("api/aitools/", include("aitools.urls")),
+    path("api/messages/", include("chats.urls")),
 
 
 ]
