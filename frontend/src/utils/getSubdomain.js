@@ -1,19 +1,13 @@
 export function getSubdomain() {
   const host = window.location.hostname;
   const parts = host.split(".");
-  console.log("parts", parts)
+  console.log("parts", parts.length)
 
   if (host.includes("lvh.me") || host.includes("localhost")) {
-    if (parts.length >= 2) {
+    if (parts.length === 2) {
       console.log("Subdomain detected:", parts[0]);
       return parts[0];
     }
     return null;
   }
-  console.log("got here")
-  if (parts.length > 2) {
-    return parts[0];
-  }
-
-  return null;
 }
