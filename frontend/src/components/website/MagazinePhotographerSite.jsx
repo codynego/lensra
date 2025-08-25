@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Camera,
   Clock,
@@ -8,35 +8,21 @@ import {
   MapPin,
   Star,
   Calendar,
-  Eye,
-  Heart,
-  MessageCircle,
-  Home,
-  User,
-  Briefcase,
   Images,
   X,
-  ChevronDown,
   Send,
   Award,
-  Sparkles,
-  Play,
+  Heart,
   Instagram,
   Twitter,
   Facebook,
   ArrowRight,
-  Plus,
-  Minus,
-  Grid,
-  Filter,
-  Download,
-  Share2,
   ZoomIn,
   Menu,
-  ExternalLink,
-  ChevronRight,
-  CheckCircle,
   Quote,
+  CheckCircle,
+  Share2,
+  Sparkles,
 } from "lucide-react";
 import axios from "axios";
 
@@ -109,6 +95,14 @@ const MagazinePhotographerSite = ({ subdomain }) => {
     }
   }, [subdomain]);
 
+  // Client-side validation
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isFutureDate = (date, time) => {
+    if (!date || !time) return false;
+    const sessionDateTime = new Date(`${date}T${time}`);
+    return sessionDateTime > new Date();
+  };
+
   // Handle booking form changes
   const handleBookingFormChange = (e) => {
     const { name, value } = e.target;
@@ -122,26 +116,42 @@ const MagazinePhotographerSite = ({ subdomain }) => {
       setBookingStatus({ type: "error", message: "Please select a package." });
       return;
     }
+    if (!isValidEmail(bookingForm.email)) {
+      setBookingStatus({ type: "error", message: "Invalid email format." });
+      return;
+    }
+    if (!isFutureDate(bookingForm.session_date, bookingForm.session_time)) {
+      setBookingStatus({ type: "error", message: "Session date and time must be in the future." });
+      return;
+    }
 
     setBookingLoading(true);
     setBookingStatus(null);
 
     try {
+      // Format session_time to HH:MM:SS
+      let sessionTime = bookingForm.session_time;
+      if (sessionTime && sessionTime.length === 5) {
+        sessionTime = `${sessionTime}:00`; // Append seconds if missing
+      }
+
       const payload = {
-        guest_client: {
+        client: {
           first_name: bookingForm.first_name,
-          last_name: bookingForm.last_name,
+          last_name: bookingForm.last_name || "",
           email: bookingForm.email,
-          phone: bookingForm.phone,
-          notes: bookingForm.notes,
+          phone: bookingForm.phone || "",
+          notes: bookingForm.notes || "",
         },
         photographer: websiteData.photographer.id,
         service_package: selectedPackage.id,
         session_date: bookingForm.session_date,
-        session_time: bookingForm.session_time,
-        notes: bookingForm.notes,
-        package_price: selectedPackage.price,
+        session_time: sessionTime,
+        notes: bookingForm.notes || "",
+        package_price: parseFloat(selectedPackage.price),
       };
+
+      console.log("Booking payload:", payload); // Debugging
 
       const response = await axios.post(`${API_BASE_URL}/api/bookings/bookings/guest/`, payload);
       setBookingStatus({ type: "success", message: "Booking created successfully!" });
@@ -156,10 +166,11 @@ const MagazinePhotographerSite = ({ subdomain }) => {
       });
       setSelectedPackage(null);
     } catch (error) {
-      setBookingStatus({
-        type: "error",
-        message: error.response?.data?.detail || "Failed to create booking. Please try again.",
-      });
+      const errorMessage =
+        error.response?.data?.detail ||
+        Object.values(error.response?.data || {}).flat().join(" ") ||
+        "Failed to create booking. Please try again.";
+      setBookingStatus({ type: "error", message: errorMessage });
     } finally {
       setBookingLoading(false);
     }
@@ -174,6 +185,11 @@ const MagazinePhotographerSite = ({ subdomain }) => {
   // Handle message submission
   const handleMessageSubmit = async (e) => {
     e.preventDefault();
+    if (!isValidEmail(messageForm.email)) {
+      setMessageStatus({ type: "error", message: "Invalid email format." });
+      return;
+    }
+
     setMessageLoading(true);
     setMessageStatus(null);
 
@@ -189,10 +205,11 @@ const MagazinePhotographerSite = ({ subdomain }) => {
       setMessageStatus({ type: "success", message: "Message sent successfully!" });
       setMessageForm({ name: "", email: "", content: "" });
     } catch (error) {
-      setMessageStatus({
-        type: "error",
-        message: error.response?.data?.detail || "Failed to send message. Please try again.",
-      });
+      const errorMessage =
+        error.response?.data?.detail ||
+        Object.values(error.response?.data || {}).flat().join(" ") ||
+        "Failed to send message. Please try again.";
+      setMessageStatus({ type: "error", message: errorMessage });
     } finally {
       setMessageLoading(false);
     }
@@ -255,9 +272,8 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 capitalize relative overflow-hidden ${
-                      activeTab === tab ? "text-white shadow-lg scale-105" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                    }`}
+                    className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 capitalize relative overflow-hidden ${activeTab === tab ? "text-white shadow-lg scale-105" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      }`}
                     style={{
                       backgroundColor: activeTab === tab ? primaryColor : "transparent",
                     }}
@@ -292,9 +308,8 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                     setActiveTab(tab);
                     setMobileMenuOpen(false);
                   }}
-                  className={`block w-full text-left px-6 py-4 rounded-2xl font-medium transition-all duration-300 capitalize ${
-                    activeTab === tab ? "text-white shadow-lg" : "text-gray-600 hover:bg-gray-100"
-                  }`}
+                  className={`block w-full text-left px-6 py-4 rounded-2xl font-medium transition-all duration-300 capitalize ${activeTab === tab ? "text-white shadow-lg" : "text-gray-600 hover:bg-gray-100"
+                    }`}
                   style={{
                     backgroundColor: activeTab === tab ? primaryColor : "transparent",
                   }}
@@ -468,9 +483,8 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                     <button
                       key={index}
                       onClick={() => setCurrentTestimonial(index)}
-                      className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                        index === currentTestimonial ? "bg-pink-500 scale-125" : "bg-gray-300"
-                      }`}
+                      className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentTestimonial ? "bg-pink-500 scale-125" : "bg-gray-300"
+                        }`}
                     />
                   ))}
                 </div>
@@ -514,44 +528,47 @@ const MagazinePhotographerSite = ({ subdomain }) => {
             <div className="grid lg:grid-cols-2 gap-16">
               {/* Package Selection */}
               <div className="space-y-8">
-                {packages?.map((pkg, index) => (
-                  <div
-                    key={pkg.id || index}
-                    className={`group relative bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-4 overflow-hidden border border-gray-100 ${
-                      selectedPackage?.id === pkg.id ? "border-2 border-pink-500" : ""
-                    }`}
-                    onClick={() => setSelectedPackage(pkg)}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative z-10">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                          <Camera className="h-8 w-8 text-white" />
+                {packages?.length > 0 ? (
+                  packages.map((pkg) => (
+                    <div
+                      key={pkg.id}
+                      className={`group relative bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-4 overflow-hidden border border-gray-100 ${selectedPackage?.id === pkg.id ? "border-2 border-pink-500" : ""
+                        }`}
+                      onClick={() => setSelectedPackage(pkg)}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                            <Camera className="h-8 w-8 text-white" />
+                          </div>
+                          <div className="text-right">
+                            <div className="text-3xl font-black text-gray-900">${pkg.price}</div>
+                            <div className="text-gray-500 text-sm">starting from</div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-3xl font-black text-gray-900">${pkg.price}</div>
-                          <div className="text-gray-500 text-sm">starting from</div>
-                        </div>
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900 mb-4">{pkg.title}</h3>
-                      <p className="text-gray-600 mb-6 leading-relaxed">{pkg.description}</p>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 text-gray-700">
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                          <span>High-resolution digital gallery</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-gray-700">
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                          <span>Professional editing included</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-gray-700">
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                          <span>{pkg.duration || "60"} minute session</span>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-4">{pkg.title}</h3>
+                        <p className="text-gray-600 mb-6 leading-relaxed">{pkg.description}</p>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 text-gray-700">
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <span>High-resolution digital gallery</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-gray-700">
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <span>Professional editing included</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-gray-700">
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <span>{pkg.duration || "60"} minute session</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-gray-600 text-lg">No packages available at the moment.</p>
+                )}
               </div>
 
               {/* Booking Form */}
@@ -572,7 +589,7 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                     name="last_name"
                     value={bookingForm.last_name}
                     onChange={handleBookingFormChange}
-                    placeholder="Last Name"
+                    placeholder="Last Name (optional)"
                     className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-pink-400 transition-all duration-300 text-gray-900"
                   />
                   <input
@@ -618,9 +635,8 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                   ></textarea>
                   {bookingStatus && (
                     <div
-                      className={`p-4 rounded-2xl ${
-                        bookingStatus.type === "success" ? "bg-green-100" : "bg-red-100"
-                      }`}
+                      className={`p-4 rounded-2xl ${bookingStatus.type === "success" ? "bg-green-100" : "bg-red-100"
+                        }`}
                     >
                       <p className={bookingStatus.type === "success" ? "text-green-700" : "text-red-700"}>
                         {bookingStatus.message}
@@ -774,9 +790,8 @@ const MagazinePhotographerSite = ({ subdomain }) => {
                     ></textarea>
                     {messageStatus && (
                       <div
-                        className={`p-4 rounded-2xl ${
-                          messageStatus.type === "success" ? "bg-green-100" : "bg-red-100"
-                        }`}
+                        className={`p-4 rounded-2xl ${messageStatus.type === "success" ? "bg-green-100" : "bg-red-100"
+                          }`}
                       >
                         <p className={messageStatus.type === "success" ? "text-green-700" : "text-red-700"}>
                           {messageStatus.message}
@@ -944,6 +959,10 @@ const MagazinePhotographerSite = ({ subdomain }) => {
         .animate-scaleIn {
           animation: scaleIn 0.3s ease-out;
         }
+        input::placeholder,
+        textarea::placeholder {
+          color: #9ca3af;
+        }
       `}</style>
     </div>
   );
@@ -960,8 +979,9 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
   };
 
   const categories = ["all", "portrait", "wedding", "event", "lifestyle"];
+  const filteredPhotos = filter === "all" ? photos : photos.filter((photo) => photo.category?.toLowerCase() === filter);
 
-  if (!photos || photos.length === 0) {
+  if (!filteredPhotos || filteredPhotos.length === 0) {
     return (
       <div className="text-center py-24">
         <div className="relative mb-8">
@@ -982,9 +1002,8 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
           <button
             key={category}
             onClick={() => setFilter(category)}
-            className={`px-8 py-4 rounded-2xl font-semibold transition-all duration-300 capitalize text-lg ${
-              filter === category ? "text-white shadow-xl scale-105" : "text-gray-600 bg-white hover:bg-gray-50 hover:shadow-md border-2 border-gray-200"
-            }`}
+            className={`px-8 py-4 rounded-2xl font-semibold transition-all duration-300 capitalize text-lg ${filter === category ? "text-white shadow-xl scale-105" : "text-gray-600 bg-white hover:bg-gray-50 hover:shadow-md border-2 border-gray-200"
+              }`}
             style={{
               backgroundColor: filter === category ? primaryColor : undefined,
               borderColor: filter === category ? primaryColor : undefined,
@@ -997,7 +1016,7 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
 
       {/* Magazine-style Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {photos.map((photo, index) => {
+        {filteredPhotos.map((photo, index) => {
           const isLarge = index % 7 === 0;
           const isTall = index % 5 === 0 && index % 7 !== 0;
           const isWide = index % 6 === 0 && index % 7 !== 0;
@@ -1005,9 +1024,8 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
           return (
             <div
               key={photo.id || index}
-              className={`group relative cursor-pointer overflow-hidden rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 ${
-                isLarge ? "md:col-span-2 md:row-span-2" : isTall ? "md:row-span-2" : isWide ? "md:col-span-2" : ""
-              }`}
+              className={`group relative cursor-pointer overflow-hidden rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 ${isLarge ? "md:col-span-2 md:row-span-2" : isTall ? "md:row-span-2" : isWide ? "md:col-span-2" : ""
+                }`}
               style={{
                 minHeight: isLarge ? "400px" : isTall ? "350px" : "250px",
               }}
@@ -1023,15 +1041,13 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
 
               {/* Gradient overlay */}
               <div
-                className={`absolute inset-0 transition-all duration-500 ${
-                  hoveredIndex === index ? "bg-gradient-to-t from-black/80 via-black/20 to-transparent" : "bg-transparent"
-                }`}
+                className={`absolute inset-0 transition-all duration-500 ${hoveredIndex === index ? "bg-gradient-to-t from-black/80 via-black/20 to-transparent" : "bg-transparent"
+                  }`}
               >
                 {/* Heart icon */}
                 <div
-                  className={`absolute top-6 right-6 transition-all duration-300 ${
-                    hoveredIndex === index ? "opacity-100 scale-100" : "opacity-0 scale-75"
-                  }`}
+                  className={`absolute top-6 right-6 transition-all duration-300 ${hoveredIndex === index ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                    }`}
                 >
                   <button className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-red-500/80 transition-all duration-300 group/heart">
                     <Heart className="h-6 w-6 text-white group-hover/heart:fill-white transition-all duration-200" />
@@ -1040,9 +1056,8 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
 
                 {/* Photo info */}
                 <div
-                  className={`absolute bottom-0 left-0 right-0 p-6 transition-all duration-300 ${
-                    hoveredIndex === index ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-                  }`}
+                  className={`absolute bottom-0 left-0 right-0 p-6 transition-all duration-300 ${hoveredIndex === index ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+                    }`}
                 >
                   <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
                     <h4 className="text-white font-bold text-lg mb-2">{photo.title || `Untitled ${index + 1}`}</h4>
@@ -1065,9 +1080,8 @@ const MagazineGallery = ({ photos, setSelectedPhoto, primaryColor }) => {
 
                 {/* Category badge */}
                 <div
-                  className={`absolute top-6 left-6 transition-all duration-300 ${
-                    hoveredIndex === index ? "opacity-100 scale-100" : "opacity-0 scale-75"
-                  }`}
+                  className={`absolute top-6 left-6 transition-all duration-300 ${hoveredIndex === index ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                    }`}
                 >
                   <span
                     className="px-4 py-2 text-white text-xs font-semibold rounded-full backdrop-blur-sm border border-white/20"
