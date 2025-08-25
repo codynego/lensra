@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Camera,
   Clock,
@@ -8,35 +8,15 @@ import {
   MapPin,
   Star,
   Calendar,
-  Eye,
-  Heart,
-  MessageCircle,
-  Home,
-  User,
-  Briefcase,
   Images,
   X,
-  ChevronDown,
   Send,
   Award,
-  Sparkles,
-  Play,
   Instagram,
   Twitter,
   Facebook,
   ArrowRight,
-  Plus,
-  Minus,
-  Grid,
-  Filter,
-  Download,
-  Share2,
   ZoomIn,
-  Menu,
-  ExternalLink,
-  ChevronRight,
-  CheckCircle,
-  Quote,
 } from "lucide-react";
 import axios from "axios";
 
@@ -70,8 +50,6 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
   });
   const [messageStatus, setMessageStatus] = useState(null);
   const [messageLoading, setMessageLoading] = useState(false);
-
-  console.log("Rendering MinimalistPhotographerSite with subdomain:", subdomain);
 
   // Mouse tracking for interactive elements
   useEffect(() => {
@@ -115,6 +93,14 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
     }
   }, [subdomain]);
 
+  // Client-side validation
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isFutureDate = (date, time) => {
+    if (!date || !time) return false;
+    const sessionDateTime = new Date(`${date}T${time}`);
+    return sessionDateTime > new Date();
+  };
+
   // Handle booking form changes
   const handleBookingFormChange = (e) => {
     const { name, value } = e.target;
@@ -128,26 +114,42 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
       setBookingStatus({ type: "error", message: "Please select a package." });
       return;
     }
+    if (!isValidEmail(bookingForm.email)) {
+      setBookingStatus({ type: "error", message: "Invalid email format." });
+      return;
+    }
+    if (!isFutureDate(bookingForm.session_date, bookingForm.session_time)) {
+      setBookingStatus({ type: "error", message: "Session date and time must be in the future." });
+      return;
+    }
 
     setBookingLoading(true);
     setBookingStatus(null);
 
     try {
+      // Format session_time to HH:MM:SS
+      let sessionTime = bookingForm.session_time;
+      if (sessionTime && sessionTime.length === 5) {
+        sessionTime = `${sessionTime}:00`; // Append seconds if missing
+      }
+
       const payload = {
-        guest_client: {
+        client: {
           first_name: bookingForm.first_name,
-          last_name: bookingForm.last_name,
+          last_name: bookingForm.last_name || "",
           email: bookingForm.email,
-          phone: bookingForm.phone,
-          notes: bookingForm.notes,
+          phone: bookingForm.phone || "",
+          notes: bookingForm.notes || "",
         },
         photographer: websiteData.photographer.id,
         service_package: selectedPackage.id,
         session_date: bookingForm.session_date,
-        session_time: bookingForm.session_time,
-        notes: bookingForm.notes,
-        package_price: selectedPackage.price,
+        session_time: sessionTime,
+        notes: bookingForm.notes || "",
+        package_price: parseFloat(selectedPackage.price),
       };
+
+      console.log("Booking payload:", payload); // Debugging
 
       const response = await axios.post(`${API_BASE_URL}/api/bookings/bookings/guest/`, payload);
       setBookingStatus({ type: "success", message: "Booking created successfully!" });
@@ -162,10 +164,11 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
       });
       setSelectedPackage(null);
     } catch (error) {
-      setBookingStatus({
-        type: "error",
-        message: error.response?.data?.detail || "Failed to create booking. Please try again.",
-      });
+      const errorMessage =
+        error.response?.data?.detail ||
+        Object.values(error.response?.data || {}).flat().join(" ") ||
+        "Failed to create booking. Please try again.";
+      setBookingStatus({ type: "error", message: errorMessage });
     } finally {
       setBookingLoading(false);
     }
@@ -180,6 +183,11 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
   // Handle message submission
   const handleMessageSubmit = async (e) => {
     e.preventDefault();
+    if (!isValidEmail(messageForm.email)) {
+      setMessageStatus({ type: "error", message: "Invalid email format." });
+      return;
+    }
+
     setMessageLoading(true);
     setMessageStatus(null);
 
@@ -191,14 +199,15 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
         photographer_id: websiteData.photographer.id,
       };
 
-      const response = await axios.post(`${API_BASE_URL}/api/messages/messages/send/`, payload);
+      const response = await axios.post(`${API_BASE_URL}/api/messages/messages/send/`, payload); // Fixed message endpoint
       setMessageStatus({ type: "success", message: "Message sent successfully!" });
       setMessageForm({ name: "", email: "", content: "" });
     } catch (error) {
-      setMessageStatus({
-        type: "error",
-        message: error.response?.data?.detail || "Failed to send message. Please try again.",
-      });
+      const errorMessage =
+        error.response?.data?.detail ||
+        Object.values(error.response?.data || {}).flat().join(" ") ||
+        "Failed to send message. Please try again.";
+      setMessageStatus({ type: "error", message: errorMessage });
     } finally {
       setMessageLoading(false);
     }
@@ -293,7 +302,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                 {activeSection === section && (
                   <div
                     className="absolute inset-0 rounded-full animate-pulse"
-                    style={{ backgroundColor: secondaryColor }}
+                    style={{ backgroundColor: `${secondaryColor}30` }}
                   ></div>
                 )}
               </button>
@@ -443,7 +452,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                 <h3 className="text-2xl font-light" style={{ color: secondaryColor }}>
                   Available Packages
                 </h3>
-                {packages && packages.length > 0 ? (
+                {packages?.length > 0 ? (
                   packages.map((pkg) => (
                     <div
                       key={pkg.id}
@@ -463,7 +472,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                       </p>
                       <div className="flex items-center gap-2 mt-4">
                         <DollarSign className="h-5 w-5" style={{ color: secondaryColor }} />
-                        <span style={{ color: primaryColor }}>{pkg.price}</span>
+                        <span style={{ color: primaryColor }}>${pkg.price}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Clock className="h-5 w-5" style={{ color: secondaryColor }} />
@@ -486,11 +495,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     onChange={handleBookingFormChange}
                     placeholder="First Name"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <input
@@ -498,13 +503,9 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     name="last_name"
                     value={bookingForm.last_name}
                     onChange={handleBookingFormChange}
-                    placeholder="Last Name"
+                    placeholder="Last Name (optional)"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                   />
                   <input
                     type="email"
@@ -513,11 +514,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     onChange={handleBookingFormChange}
                     placeholder="Your Email"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <input
@@ -527,11 +524,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     onChange={handleBookingFormChange}
                     placeholder="Your Phone (optional)"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                   />
                   <input
                     type="date"
@@ -539,11 +532,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     value={bookingForm.session_date}
                     onChange={handleBookingFormChange}
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <input
@@ -552,11 +541,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     value={bookingForm.session_time}
                     onChange={handleBookingFormChange}
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <textarea
@@ -566,11 +551,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     placeholder="Additional Notes (e.g., location, special requests)"
                     rows={4}
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300 resize-none"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                   ></textarea>
                   {bookingStatus && (
                     <div
@@ -619,7 +600,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                 </p>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6" style={{ borderColor: `${primaryColor}10` }}>
-                    <Award className="h-8 w-8 mb-3" style dura={{ color: secondaryColor }} />
+                    <Award className="h-8 w-8 mb-3" style={{ color: secondaryColor }} />
                     <div className="text-2xl font-light" style={{ color: primaryColor }}>
                       {photographer?.experience_years || "8"}+
                     </div>
@@ -741,11 +722,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     onChange={handleMessageFormChange}
                     placeholder="Your Name"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <input
@@ -755,11 +732,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     onChange={handleMessageFormChange}
                     placeholder="Your Email"
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   />
                   <textarea
@@ -769,11 +742,7 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
                     placeholder="Tell me about your vision..."
                     rows={5}
                     className="w-full px-6 py-4 bg-white/5 border rounded-2xl text-white focus:outline-none transition-all duration-300 resize-none"
-                    style={{
-                      borderColor: `${primaryColor}20`,
-                      placeholderColor: `${secondaryColor}50`,
-                      ":focus": { borderColor: `${primaryColor}40` },
-                    }}
+                    style={{ borderColor: `${primaryColor}20` }}
                     required
                   ></textarea>
                   {messageStatus && (
@@ -875,6 +844,14 @@ const MinimalistPhotographerSite = ({ subdomain }) => {
         }
         .animation-delay-400 {
           animation-delay: 0.4s;
+        }
+        input::placeholder,
+        textarea::placeholder {
+          color: ${secondaryColor}50;
+        }
+        input:focus,
+        textarea:focus {
+          border-color: ${primaryColor}40;
         }
       `}</style>
     </div>
