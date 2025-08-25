@@ -180,8 +180,8 @@ const BackgroundRemoval = ({ theme = 'dark', onClose, sparksRemaining }) => {
               <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 opacity-20 blur animate-pulse" />
             </div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                Background Removal
+              <h1 className="text-sm sm:text-xl font-bold bg-gradient-to-r from-indigo-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Lensra Background Removal
               </h1>
               <p className={`text-sm sm:text-base mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Remove backgrounds with AI precision

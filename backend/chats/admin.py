@@ -12,8 +12,8 @@ class MessageInline(admin.TabularInline):
 
 @admin.register(MessageThread)
 class MessageThreadAdmin(admin.ModelAdmin):
-    list_display = ("id", "photographer", "client", "created_at", "unread_count")
-    search_fields = ("photographer__user__username", "client__email")
+    list_display = ("id", "receiver", "sender", "created_at", "unread_count")
+    search_fields = ("receiver__username", "sender__email")
     list_filter = ("created_at",)
     inlines = [MessageInline]
 

@@ -5,6 +5,7 @@ from .views import (
     MessageListView,
     SendMessageView,
     MarkMessageReadView,
+    SendReplyView,
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path("threads/<int:thread_id>/messages/", MessageListView.as_view(), name="message-list"),
     path("messages/send/", SendMessageView.as_view(), name="message-send"),
     path("messages/<int:message_id>/read/", MarkMessageReadView.as_view(), name="message-mark-read"),
+    path("messages/reply/", SendReplyView.as_view(), name="send-reply"),
 ]

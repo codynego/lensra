@@ -4,56 +4,83 @@ from .utils import get_currency_symbol, CURRENCY_SYMBOLS
 
 User = settings.AUTH_USER_MODEL
 
+
 class Photographer(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='photographer')
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='photographer'
+    )
     currency = models.CharField(
         max_length=10,
         default='USD',
-        choices=[(c, c) for c in CURRENCY_SYMBOLS.keys()]  # Dropdown in admin
+        choices=[(c, c) for c in CURRENCY_SYMBOLS.keys()]
     )
     years_of_experience = models.PositiveIntegerField(default=0)
     instagram = models.URLField(blank=True, null=True)
     facebook = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Many-to-many relation to users via Client
+    all_clients = models.ManyToManyField(
+        User,
+        through='Client',
+        related_name='photographers'
+    )
+
     def __str__(self):
         return self.user.username
 
     @property
     def currency_symbol(self):
-        """Return the currency symbol for this photographer's currency."""
         return get_currency_symbol(self.currency)
 
+    def add_client(self, user, notes=None):
+        """Tag a user as a client with optional notes."""
+        tag, created = PhotographerClient.objects.get_or_create(
+            photographer=self, client=user
+        )
+        if notes:
+            tag.notes = notes
+            tag.save(update_fields=['notes'])
+        return tag
+
+    def remove_client(self, user):
+        """Remove a tagged client."""
+        PhotographerClient.objects.filter(photographer=self, client=user).delete()
 
 
 class Client(models.Model):
+    """
+    Through model linking a Photographer to a User (client).
+    Allows additional metadata like notes.
+    """
     photographer = models.ForeignKey(
-        'Photographer',
+        Photographer,
         on_delete=models.CASCADE,
-        related_name="clients"
+        related_name='client_tags'
     )
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name="photographer_clients"
+        User,
+        on_delete=models.CASCADE,
+        related_name='client_tags'
     )
-    name = models.CharField(max_length=255)
-    email = models.EmailField()
-    phone = models.CharField(max_length=50, blank=True, null=True)
-    address = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def get_full_name(self):
-        """Return full name of the client, handling both registered and guest clients."""
-        if self.user:
-            return self.user.get_full_name()
-        return self.name
+    class Meta:
+        unique_together = ('photographer', 'user')
+        ordering = ['-created_at']
+
+    @property
+    def name(self):
+        return self.user.get_full_name() or self.user.username
+
+    @property
+    def email(self):
+        return self.user.email
 
     @property
     def is_registered(self):
-        return self.user is not None
+        return True  # always tied to a user
 
     def __str__(self):
-        return self.name
+        return f"{self.name} (Client of {self.photographer.user.username})"

@@ -158,9 +158,9 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
   const filteredAndSortedClients = useMemo(() => {
     const filtered = clients
       .filter(client => {
-        const matchesSearch = client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             client.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = client.user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             client.user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             client.user.phone_number?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesFilter = filterStatus === 'all' ||
                              (filterStatus === 'active' && (client.total_bookings || 0) > 0) ||
                              (filterStatus === 'inactive' && (client.total_bookings || 0) === 0);
@@ -523,12 +523,12 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                         client.total_bookings > 0 ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' :
                         isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {client.name ? client.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'NA'}
+                        {client.user.first_name ? client.user.first_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'NA'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <h3 id={`client-${client.id}-name`} className={`font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {client.name || 'Unnamed Client'}
+                            {client.user.first_name || 'Unnamed Client'}
                           </h3>
                           {client.total_bookings > 5 && (
                             <Star className="w-4 h-4 text-yellow-500 fill-current" aria-label="VIP Client" />
@@ -540,19 +540,19 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                       </div>
                     </div>
                     <div className="space-y-2 mb-4">
-                      {client.email && (
+                      {client.user.email && (
                         <div className="flex items-center gap-3">
                           <Mail className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
-                          <span className={`text-sm truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={client.email}>
-                            {client.email}
+                          <span className={`text-sm truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={client.user.email}>
+                            {client.user.email}
                           </span>
                         </div>
                       )}
-                      {client.phone && (
+                      {client.user.phone_number && (
                         <div className="flex items-center gap-3">
                           <Phone className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
                           <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                            {client.phone}
+                            {client.user.phone_number}
                           </span>
                         </div>
                       )}
@@ -591,7 +591,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                           isDark ? 'bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                         }`}
-                        aria-label={`View details for ${client.name || 'Unnamed Client'}`}
+                        aria-label={`View details for ${client.user.first_name || 'Unnamed Client'}`}
                       >
                         <Eye className="w-4 h-4" />
                         View
@@ -604,7 +604,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                         className={`p-2.5 rounded-lg transition-all duration-200 ${
                           isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
-                        aria-label={`Edit ${client.name || 'Unnamed Client'}`}
+                        aria-label={`Edit ${client.user.first_name || 'Unnamed Client'}`}
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
@@ -613,7 +613,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                         className={`p-2.5 rounded-lg transition-all duration-200 ${
                           isDark ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-red-50 text-red-600 hover:bg-red-100'
                         }`}
-                        aria-label={`Delete ${client.name || 'Unnamed Client'}`}
+                        aria-label={`Delete ${client.user.first_name || 'Unnamed Client'}`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -641,18 +641,18 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
                           <div className="flex items-center gap-2">
                             <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {client.name || 'Unnamed Client'}
+                              {client.user.first_name || 'Unnamed Client'}
                             </span>
                             {client.total_bookings > 5 && (
                               <Star className="w-4 h-4 text-yellow-500 fill-current" aria-label="VIP Client" />
                             )}
                           </div>
                         </td>
-                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 truncate max-w-xs" title={client.email}>
-                          {client.email || 'N/A'}
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 truncate max-w-xs" title={client.user.email}>
+                          {client.user.email || 'N/A'}
                         </td>
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {client.phone || 'N/A'}
+                          {client.user.phone_number || 'N/A'}
                         </td>
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {client.total_bookings || 0}
@@ -671,7 +671,7 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                                 onSelectClient(client);
                               }}
                               className={`text-indigo-600 hover:text-indigo-800 ${isDark ? 'hover:text-indigo-400' : ''}`}
-                              aria-label={`View details for ${client.name || 'Unnamed Client'}`}
+                              aria-label={`View details for ${client.user.first_name || 'Unnamed Client'}`}
                             >
                               <Eye className="w-4 h-4" />
                             </button>
@@ -681,14 +681,14 @@ const ClientList = ({ onSelectClient, onCreateClient, onEditClient, theme = 'lig
                                 onEditClient(client);
                               }}
                               className={`text-gray-600 hover:text-gray-800 ${isDark ? 'text-gray-300 hover:text-gray-100' : ''}`}
-                              aria-label={`Edit ${client.name || 'Unnamed Client'}`}
+                              aria-label={`Edit ${client.user.first_name || 'Unnamed Client'}`}
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteClient(client.id)}
                               className={`text-red-600 hover:text-red-800 ${isDark ? 'text-red-400 hover:text-red-300' : ''}`}
-                              aria-label={`Delete ${client.name || 'Unnamed Client'}`}
+                              aria-label={`Delete ${client.user.first_name || 'Unnamed Client'}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

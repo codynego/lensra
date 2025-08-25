@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Upload, Trash2, Save, Loader2, CheckCircle, AlertCircle, Palette, Zap } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 
-const ThemeBrandingForm = ({ theme }) => {
+const ThemeBrandingForm = ({ theme = 'dark' }) => {
   const [formData, setFormData] = useState({
     theme: "minimalist",
     primaryColor: "#3B82F6",
@@ -16,7 +16,6 @@ const ThemeBrandingForm = ({ theme }) => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [success, setSuccess] = useState("");
   const [apiError, setApiError] = useState("");
-
   const { authState, apiFetch } = useAuth();
   const isProUser = authState?.user?.stats?.plan_name === "Pro" || authState?.user?.stats?.plan_name === "Premium";
 
@@ -32,6 +31,9 @@ const ThemeBrandingForm = ({ theme }) => {
         const themeResponse = await apiFetch("/studio/theme-branding/", { method: "GET" });
         if (themeResponse.ok) {
           const themeData = await themeResponse.json();
+          if (process.env.NODE_ENV === 'development') {
+            console.log("Fetched theme data:", themeData);
+          }
           setFormData({
             theme: themeData.theme || "minimalist",
             primaryColor: themeData.primary_color || "#3B82F6",
@@ -43,7 +45,8 @@ const ThemeBrandingForm = ({ theme }) => {
             setPreviewImage(themeData.cover_photo);
           }
         } else if (themeResponse.status !== 404) {
-          setApiError("Failed to load theme settings");
+          const errorData = await themeResponse.json();
+          setApiError(errorData.message || "Failed to load theme settings");
         }
       } catch (error) {
         console.error("Error fetching theme data:", error);
@@ -63,6 +66,7 @@ const ThemeBrandingForm = ({ theme }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (success) setSuccess("");
+    if (apiError) setApiError("");
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -119,14 +123,18 @@ const ThemeBrandingForm = ({ theme }) => {
     }
     const validFonts = ["Inter", "Poppins", "Playfair Display", "Roboto", "Open Sans", "Lora", "Sans-serif"];
     if (!validFonts.includes(formData.font)) {
-      console.log("Selected font:", formData.font);
+      if (process.env.NODE_ENV === 'development') {
+        console.log("Selected font:", formData.font);
+      }
       setApiError("Invalid font selected");
       setLoading(false);
       return;
     }
     const validThemes = ["minimalist", "magazine", "retro"];
     if (!validThemes.includes(formData.theme)) {
-      console.log("Selected theme:", formData);
+      if (process.env.NODE_ENV === 'development') {
+        console.log("Selected theme:", formData.theme);
+      }
       setApiError("Invalid theme selected");
       setLoading(false);
       return;
@@ -134,22 +142,23 @@ const ThemeBrandingForm = ({ theme }) => {
 
     try {
       const submitData = new FormData();
-      submitData.append("theme", formData.theme || "");
-      submitData.append("primary_color", formData.primaryColor || "");
-      submitData.append("secondary_color", formData.secondaryColor || "");
-      submitData.append("font", formData.font || "");
+      submitData.append("theme", formData.theme);
+      submitData.append("primary_color", formData.primaryColor);
+      submitData.append("secondary_color", formData.secondaryColor);
+      submitData.append("font", formData.font);
 
       // Handle cover_photo
       if (formData.coverPhoto instanceof File) {
         submitData.append("cover_photo", formData.coverPhoto);
       } else if (formData.coverPhoto === null) {
-        submitData.append("cover_photo", ""); // Send empty string to clear
-      } // Omit cover_photo if it's a string (existing URL) to preserve it
+        submitData.append("cover_photo", "");
+      }
 
-      // Log FormData for debugging
-      console.log("FormData contents:");
-      for (const [key, value] of submitData.entries()) {
-        console.log(`${key}: ${value instanceof File ? value.name : value}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log("FormData contents:");
+        for (const [key, value] of submitData.entries()) {
+          console.log(`${key}: ${value instanceof File ? value.name : value}`);
+        }
       }
 
       const response = await apiFetch("/studio/theme-branding/", {
@@ -190,7 +199,6 @@ const ThemeBrandingForm = ({ theme }) => {
     { value: "Roboto", label: "Roboto (Clean)", style: "font-sans" },
     { value: "Open Sans", label: "Open Sans (Readable)", style: "font-sans" },
     { value: "Lora", label: "Lora (Traditional)", style: "font-serif" },
-
   ];
 
   const themeOptions = [
@@ -201,17 +209,21 @@ const ThemeBrandingForm = ({ theme }) => {
 
   if (initialLoading) {
     return (
-      <div
-        className={`w-full max-w-4xl mx-auto ${
-          theme === "dark"
-            ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900"
-            : "bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100"
-        }`}
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="w-full max-w-4xl mx-auto">
+        <div className={`
+          rounded-2xl shadow-xl border overflow-hidden
+          ${theme === 'dark'
+            ? 'bg-gradient-to-br from-slate-800/90 to-slate-900/90  border-slate-700/60'
+            : 'bg-white/90 border-gray-200'
+          }
+        `}>
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400" />
-            <span className="ml-2 text-gray-600 dark:text-gray-300 text-sm font-medium">Loading theme settings...</span>
+            <Loader2 className={`w-8 h-8 animate-spin ${
+              theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+            }`} />
+            <span className={`ml-2 text-sm font-medium ${
+              theme === 'dark' ? 'text-slate-300' : 'text-gray-600'
+            }`}>Loading theme settings...</span>
           </div>
         </div>
       </div>
@@ -219,41 +231,80 @@ const ThemeBrandingForm = ({ theme }) => {
   }
 
   return (
-    <div
-      className={`w-full max-w-4xl mx-auto ${
-        theme === "dark"
-          ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900"
-          : "bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100"
-        }`}
-    >
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4">
-          <h2 className="text-2xl font-bold text-white tracking-tight">Theme & Branding</h2>
-          <p className="text-indigo-100 text-sm mt-1">Customize the look and feel of your site</p>
+    <div className="w-full max-w-4xl mx-auto">
+      <div className={`
+        rounded-2xl shadow-xl border overflow-hidden transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-1
+        ${theme === 'dark'
+          ? 'bg-gradient-to-br from-slate-800/90 to-slate-900/90  border-slate-700/60'
+          : 'bg-white/90 border-gray-200'
+        }
+      `}>
+        <div className={`
+          px-4 sm:px-6 py-4 border-b
+          ${theme === 'dark'
+            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 border-slate-700/60'
+            : 'bg-gradient-to-r from-indigo-400 to-purple-500 border-gray-200'
+          }
+          backdrop-blur-xl
+        `}>
+          <h2 className={`text-lg sm:text-xl lg:text-2xl font-bold ${
+            theme === 'dark' ? 'text-white' : 'text-gray-900'
+          }`}>Theme & Branding</h2>
+          <p className={`text-sm mt-1 ${
+            theme === 'dark' ? 'text-indigo-200' : 'text-gray-600'
+          }`}>Customize the look and feel of your site</p>
         </div>
 
         {success && (
-          <div className="mx-6 mt-4 p-4 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center animate-fade-in">
-            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mr-2" />
-            <span className="text-emerald-800 dark:text-emerald-200 text-sm font-medium">{success}</span>
+          <div className={`
+            mx-4 sm:mx-6 mt-4 p-4 rounded-xl flex items-center animate-fadeIn
+            ${theme === 'dark'
+              ? 'bg-green-500/10 border border-green-500/30 backdrop-blur-xl'
+              : 'bg-green-50/80 border border-green-200'
+            }
+          `}>
+            <CheckCircle className={`w-5 h-5 mr-2 ${
+              theme === 'dark' ? 'text-green-400' : 'text-green-600'
+            }`} />
+            <span className={`text-sm font-medium ${
+              theme === 'dark' ? 'text-green-300' : 'text-green-800'
+            }`}>{success}</span>
           </div>
         )}
 
         {apiError && (
-          <div className="mx-6 mt-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center animate-fade-in">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
-            <span className="text-red-800 dark:text-red-200 text-sm font-medium">{apiError}</span>
+          <div className={`
+            mx-4 sm:mx-6 mt-4 p-4 rounded-xl flex items-center animate-fadeIn
+            ${theme === 'dark'
+              ? 'bg-red-500/10 border border-red-500/30 backdrop-blur-xl'
+              : 'bg-red-50/80 border border-red-200'
+            }
+          `}>
+            <AlertCircle className={`w-5 h-5 mr-2 ${
+              theme === 'dark' ? 'text-red-400' : 'text-red-600'
+            }`} />
+            <span className={`text-sm font-medium ${
+              theme === 'dark' ? 'text-red-300' : 'text-red-800'
+            }`}>{apiError}</span>
           </div>
         )}
 
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-6 lg:p-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-6">
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Theme</label>
+                  <label className={`block text-sm font-medium ${
+                    theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                  }`}>Theme</label>
                   {!isProUser && (
-                    <span className="inline-flex items-center px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-300 text-xs font-semibold rounded-full">
+                    <span className={`
+                      inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                      ${theme === 'dark'
+                        ? 'bg-indigo-500/30 text-indigo-300'
+                        : 'bg-indigo-100 text-indigo-800'
+                      }
+                    `}>
                       <Zap className="w-3 h-3 mr-1" />
                       Pro
                     </span>
@@ -263,9 +314,17 @@ const ThemeBrandingForm = ({ theme }) => {
                   name="theme"
                   value={formData.theme}
                   onChange={handleChange}
-                  className={`w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 border rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all duration-300 ${
-                    isProUser ? "border-gray-300 dark:border-gray-600" : "border-gray-300 dark:border-gray-600 opacity-50 cursor-not-allowed"
-                  }`}
+                  className={`
+                    w-full px-4 py-2.5 rounded-xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-200 backdrop-blur-sm
+                    ${theme === 'dark'
+                      ? isProUser
+                        ? 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 hover:bg-slate-700/70'
+                        : 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 opacity-50 cursor-not-allowed'
+                      : isProUser
+                        ? 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 hover:bg-white/90'
+                        : 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 opacity-50 cursor-not-allowed'
+                    }
+                  `}
                   disabled={loading || !isProUser}
                   title={!isProUser ? "Upgrade to Pro to change theme" : ""}
                 >
@@ -275,10 +334,14 @@ const ThemeBrandingForm = ({ theme }) => {
                     </option>
                   ))}
                 </select>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose the overall style of your site</p>
+                <p className={`text-sm mt-1 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                }`}>Choose the overall style of your site</p>
                 {!isProUser && (
-                  <p className="text-sm text-indigo-600 dark:text-indigo-400 mt-1">
-                    <a href="/upgrade" className="underline hover:text-indigo-800 dark:hover:text-indigo-300">
+                  <p className={`text-sm mt-1 ${
+                    theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+                  }`}>
+                    <a href="/upgrade" className="underline hover:text-indigo-300 dark:hover:text-indigo-300">
                       Upgrade to Pro
                     </a>{" "}
                     to unlock theme customization
@@ -287,7 +350,9 @@ const ThemeBrandingForm = ({ theme }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Primary Color</label>
+                <label className={`block text-sm font-medium mb-3 ${
+                  theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                }`}>Primary Color</label>
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <input
@@ -295,25 +360,43 @@ const ThemeBrandingForm = ({ theme }) => {
                       name="primaryColor"
                       value={formData.primaryColor}
                       onChange={handleChange}
-                      className="w-12 h-12 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+                      className={`
+                        w-14 h-14 rounded-lg cursor-pointer
+                        ${theme === 'dark' ? 'border-slate-600/50' : 'border-gray-200/50'}
+                        ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+                      `}
                       disabled={loading}
                     />
-                    <Palette className="absolute top-1 right-1 w-4 h-4 text-gray-500 dark:text-gray-400 pointer-events-none" />
+                    <Palette className={`
+                      absolute top-1 right-1 w-4 h-4 pointer-events-none
+                      ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}
+                    `} />
                   </div>
                   <input
                     type="text"
                     value={formData.primaryColor}
                     onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })}
-                    className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all duration-300"
+                    className={`
+                      w-28 px-3 py-2 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-200 backdrop-blur-sm
+                      ${theme === 'dark'
+                        ? 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 hover:bg-slate-700/70'
+                        : 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 hover:bg-white/90'
+                      }
+                      ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
                     placeholder="#3B82F6"
                     disabled={loading}
                   />
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Used for buttons, links, and accents</p>
+                <p className={`text-sm mt-1 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                }`}>Used for buttons, links, and accents</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Secondary Color</label>
+                <label className={`block text-sm font-medium mb-3 ${
+                  theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                }`}>Secondary Color</label>
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <input
@@ -321,28 +404,52 @@ const ThemeBrandingForm = ({ theme }) => {
                       name="secondaryColor"
                       value={formData.secondaryColor}
                       onChange={handleChange}
-                      className="w-12 h-12 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+                      className={`
+                        w-14 h-14 rounded-lg cursor-pointer
+                        ${theme === 'dark' ? 'border-slate-600/50' : 'border-gray-200/50'}
+                        ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+                      `}
                       disabled={loading}
                     />
-                    <Palette className="absolute top-1 right-1 w-4 h-4 text-gray-500 dark:text-gray-400 pointer-events-none" />
+                    <Palette className={`
+                      absolute top-1 right-1 w-4 h-4 pointer-events-none
+                      ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}
+                    `} />
                   </div>
                   <input
                     type="text"
                     value={formData.secondaryColor}
                     onChange={(e) => setFormData({ ...formData, secondaryColor: e.target.value })}
-                    className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all duration-300"
+                    className={`
+                      w-28 px-3 py-2 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-200 backdrop-blur-sm
+                      ${theme === 'dark'
+                        ? 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 hover:bg-slate-700/70'
+                        : 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 hover:bg-white/90'
+                      }
+                      ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
                     placeholder="#EF4444"
                     disabled={loading}
                   />
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Used for highlights and CTAs</p>
+                <p className={`text-sm mt-1 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                }`}>Used for highlights and CTAs</p>
               </div>
 
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Font Family</label>
+                  <label className={`block text-sm font-medium ${
+                    theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                  }`}>Font Family</label>
                   {!isProUser && (
-                    <span className="inline-flex items-center px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-300 text-xs font-semibold rounded-full">
+                    <span className={`
+                      inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                      ${theme === 'dark'
+                        ? 'bg-indigo-500/30 text-indigo-300'
+                        : 'bg-indigo-100 text-indigo-800'
+                      }
+                    `}>
                       <Zap className="w-3 h-3 mr-1" />
                       Pro
                     </span>
@@ -352,9 +459,17 @@ const ThemeBrandingForm = ({ theme }) => {
                   name="font"
                   value={formData.font}
                   onChange={handleChange}
-                  className={`w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 border rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all duration-300 ${
-                    isProUser ? "border-gray-300 dark:border-gray-600" : "border-gray-300 dark:border-gray-600 opacity-50 cursor-not-allowed"
-                  }`}
+                  className={`
+                    w-full px-4 py-2.5 rounded-xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-200 backdrop-blur-sm
+                    ${theme === 'dark'
+                      ? isProUser
+                        ? 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 hover:bg-slate-700/70'
+                        : 'bg-slate-700/50 border-slate-600/50 text-slate-100 placeholder-slate-400 opacity-50 cursor-not-allowed'
+                      : isProUser
+                        ? 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 hover:bg-white/90'
+                        : 'bg-white/70 border-gray-200/50 text-gray-900 placeholder-gray-400 opacity-50 cursor-not-allowed'
+                    }
+                  `}
                   disabled={loading || !isProUser}
                   title={!isProUser ? "Upgrade to Pro to change font" : ""}
                 >
@@ -364,10 +479,14 @@ const ThemeBrandingForm = ({ theme }) => {
                     </option>
                   ))}
                 </select>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">This will be used for all text on your site</p>
+                <p className={`text-sm mt-1 ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                }`}>This will be used for all text on your site</p>
                 {!isProUser && (
-                  <p className="text-sm text-indigo-600 dark:text-indigo-400 mt-1">
-                    <a href="/upgrade" className="underline hover:text-indigo-800 dark:hover:text-indigo-300">
+                  <p className={`text-sm mt-1 ${
+                    theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+                  }`}>
+                    <a href="/upgrade" className="underline hover:text-indigo-300 dark:hover:text-indigo-300">
                       Upgrade to Pro
                     </a>{" "}
                     to unlock font customization
@@ -376,12 +495,22 @@ const ThemeBrandingForm = ({ theme }) => {
               </div>
 
               <div className="mt-6">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Preview</h4>
-                <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-3" style={{ fontFamily: formData.font }}>
+                <h4 className={`text-sm font-medium ${
+                  theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                } mb-3`}>Preview</h4>
+                <div className={`
+                  border rounded-xl p-4 space-y-3 backdrop-blur-sm
+                  ${theme === 'dark'
+                    ? 'bg-slate-700/50 border-slate-600/50'
+                    : 'bg-white/70 border-gray-200/50'
+                  }
+                `} style={{ fontFamily: formData.font }}>
                   <h3 className="text-lg font-semibold" style={{ color: formData.primaryColor }}>
                     Your Business Name
                   </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                  <p className={`text-sm ${
+                    theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+                  }`}>
                     This is how your content will look with the selected {formData.theme} theme, font, and colors.
                   </p>
                   <div className="flex gap-2">
@@ -406,21 +535,28 @@ const ThemeBrandingForm = ({ theme }) => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Cover Photo</label>
-                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg relative hover:border-indigo-400 dark:hover:border-indigo-400 transition-all duration-300">
+                <label className={`block text-sm font-medium mb-3 ${
+                  theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
+                }`}>Cover Photo</label>
+                <div className={`
+                  border-2 border-dashed rounded-xl relative hover:border-indigo-400 dark:hover:border-indigo-400 transition-all duration-300
+                  ${theme === 'dark' ? 'border-slate-600/50' : 'border-gray-200/50'}
+                `}>
                   {previewImage ? (
                     <div className="relative">
                       <img
                         src={previewImage}
                         alt="Cover Preview"
-                        className="w-full h-48 object-cover rounded-lg"
+                        className="w-full h-48 object-cover rounded-xl"
                       />
-                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
+                      <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
                         <button
                           type="button"
                           onClick={removeCoverPhoto}
                           disabled={loading}
-                          className="bg-red-600 dark:bg-red-500 text-white p-2 rounded-full hover:bg-red-700 dark:hover:bg-red-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className={`
+                            bg-red-500/80 text-white p-2 rounded-full hover:bg-red-600 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed
+                          `}
                           title="Remove cover photo"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -431,15 +567,27 @@ const ThemeBrandingForm = ({ theme }) => {
                     <div className="p-6 text-center">
                       {uploadingImage ? (
                         <div className="flex flex-col items-center">
-                          <Loader2 className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-spin mb-2" />
-                          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Processing image...</p>
+                          <Loader2 className={`w-8 h-8 animate-spin ${
+                            theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+                          } mb-2`} />
+                          <p className={`text-sm font-medium ${
+                            theme === 'dark' ? 'text-slate-300' : 'text-gray-600'
+                          }`}>Processing image...</p>
                         </div>
                       ) : (
                         <div>
-                          <Upload className="w-10 h-10 text-gray-500 dark:text-gray-400 mx-auto mb-3 animate-bounce" />
-                          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Upload a cover photo</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">Recommended: 1200x600px, max 5MB</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">JPG, PNG, or WebP</p>
+                          <Upload className={`w-10 h-10 mx-auto mb-3 animate-bounce ${
+                            theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                          }`} />
+                          <p className={`text-sm font-medium ${
+                            theme === 'dark' ? 'text-slate-300' : 'text-gray-600'
+                          }`}>Upload a cover photo</p>
+                          <p className={`text-xs ${
+                            theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                          }`}>Recommended: 1200x600px, max 5MB</p>
+                          <p className={`text-xs ${
+                            theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                          } mt-1`}>JPG, PNG, or WebP</p>
                         </div>
                       )}
                     </div>
@@ -457,7 +605,14 @@ const ThemeBrandingForm = ({ theme }) => {
                     type="button"
                     onClick={removeCoverPhoto}
                     disabled={loading}
-                    className="mt-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+                    className={`
+                      mt-2 text-sm transition-all duration-300
+                      ${theme === 'dark'
+                        ? 'text-red-400 hover:text-red-300'
+                        : 'text-red-600 hover:text-red-800'
+                      }
+                      ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
                     title="Remove cover photo"
                   >
                     Remove cover photo
@@ -465,9 +620,19 @@ const ThemeBrandingForm = ({ theme }) => {
                 )}
               </div>
 
-              <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">Design Tips</h4>
-                <ul className="text-sm text-indigo-700 dark:text-indigo-300 space-y-1">
+              <div className={`
+                rounded-xl p-4
+                ${theme === 'dark'
+                  ? 'bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl'
+                  : 'bg-indigo-50/80 border border-indigo-200'
+                }
+              `}>
+                <h4 className={`text-sm font-medium mb-2 ${
+                  theme === 'dark' ? 'text-indigo-200' : 'text-indigo-800'
+                }`}>Design Tips</h4>
+                <ul className={`text-sm space-y-1 ${
+                  theme === 'dark' ? 'text-indigo-300' : 'text-indigo-700'
+                }`}>
                   <li>• Select a theme that aligns with your brand identity</li>
                   <li>• Use high-quality images that represent your brand</li>
                   <li>• Ensure good contrast between colors for readability</li>
@@ -478,11 +643,21 @@ const ThemeBrandingForm = ({ theme }) => {
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 sm:mt-8 flex justify-end">
             <button
               onClick={handleSubmit}
               disabled={loading || uploadingImage}
-              className="group flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+              className={`
+                group flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-medium text-sm sm:text-base transition-all duration-300 transform hover:scale-105 shadow-lg
+                ${loading || uploadingImage
+                  ? theme === 'dark'
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : theme === 'dark'
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-indigo-500/25'
+                    : 'bg-gradient-to-r from-indigo-400 to-purple-500 text-white hover:from-indigo-500 hover:to-purple-600 shadow-indigo-400/25'
+                }
+              `}
               title="Save Theme"
             >
               {loading ? (
@@ -502,18 +677,12 @@ const ThemeBrandingForm = ({ theme }) => {
       </div>
 
       <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
         }
       `}</style>
     </div>

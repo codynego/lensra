@@ -5,10 +5,10 @@ from django.conf import settings
 
 class MessageThread(models.Model):
     sender = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_threads"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_threads"
     )
     receiver = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_threads"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="received_threads"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

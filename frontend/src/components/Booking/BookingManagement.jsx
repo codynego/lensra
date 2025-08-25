@@ -311,9 +311,9 @@ const BookingManagement = ({ theme = 'light' }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const debounceTimeout = useRef(null);
-  const { apiFetch, isAuthenticated } = useAuth();
+  const { apiFetch, isAuthenticated, user } = useAuth();
   const isDark = theme === 'dark';
-  const [currencySymbol, setCurrencySymbol] = useState('');
+  const currencySymbol = user?.stats?.currency_symbol || '#';
 
   const fetchBookings = useCallback(async () => {
     if (!isAuthenticated) {
@@ -335,7 +335,6 @@ const BookingManagement = ({ theme = 'light' }) => {
       }
 
       const data = await response.json();
-      setCurrencySymbol(data[0]?.currency_symbol || '$'); // Default to '$' if not provided
 
       const results = Array.isArray(data) ? data : Array.isArray(data.results) ? data.results : [];
 

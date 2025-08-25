@@ -34,6 +34,8 @@ def create_photographer_studio(sender, instance, created, **kwargs):
     if created:
         Studio.objects.create(photographer=instance.user)
 
+
+
 @receiver(post_save, sender=User)
 def create_user_subscription(sender, instance, created, **kwargs):
     """

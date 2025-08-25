@@ -1,7 +1,9 @@
-# bookings/views.py
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from .models import ServicePackage, Booking, BookingPreference, Payment
-from photographers.models import Client
+from photographers.models import Client as ClientTag, Photographer
 from .serializers import (
     ServicePackageSerializer,
     ClientSerializer,
@@ -11,9 +13,6 @@ from .serializers import (
     BookingPreferenceSerializer,
     ClientBookingsSerializer,
 )
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 
 
 # ----------------------
@@ -22,7 +21,7 @@ from rest_framework import status
 class ServicePackageListCreateView(generics.ListCreateAPIView):
     queryset = ServicePackage.objects.all()
     serializer_class = ServicePackageSerializer
-    permission_classes = [permissions.AllowAny]  # adjust later if needed
+    permission_classes = [permissions.AllowAny]
 
 
 class ServicePackageDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -35,15 +34,31 @@ class ServicePackageDetailView(generics.RetrieveUpdateDestroyAPIView):
 # 📌 Client Views
 # ----------------------
 class ClientListCreateView(generics.ListCreateAPIView):
-    queryset = Client.objects.all()
     serializer_class = ClientSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "photographer"):
+            return ClientTag.objects.filter(photographer=user.photographer)
+        return ClientTag.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not hasattr(user, "photographer"):
+            raise PermissionDenied("You are not a registered photographer.")
+        serializer.save(photographer=user.photographer)
 
 
 class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Client.objects.all()
     serializer_class = ClientSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "photographer"):
+            return ClientTag.objects.filter(photographer=user.photographer)
+        return ClientTag.objects.none()
 
 
 # ----------------------
@@ -52,31 +67,40 @@ class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
 class PaymentListCreateView(generics.ListCreateAPIView):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class PaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 # ----------------------
 # 📌 Booking Views
 # ----------------------
 class BookingListCreateView(generics.ListCreateAPIView):
-    queryset = Booking.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.method == "POST":
-            return BookingCreateSerializer
-        return BookingSerializer
+        return BookingCreateSerializer if self.request.method == "POST" else BookingSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "photographer"):
+            return Booking.objects.filter(photographer=user.photographer)
+        return Booking.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save()
+        user = self.request.user
+        if not hasattr(user, "photographer"):
+            raise PermissionDenied("You are not a registered photographer.")
+        serializer.save(photographer=user.photographer)
+
 
 class BookingDetailView(APIView):
+    """Partial update of a booking"""
+
     def patch(self, request, pk):
         try:
             booking = Booking.objects.get(pk=pk)
@@ -95,13 +119,13 @@ class BookingDetailView(APIView):
 class BookingPreferenceListCreateView(generics.ListCreateAPIView):
     queryset = BookingPreference.objects.all()
     serializer_class = BookingPreferenceSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class BookingPreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = BookingPreference.objects.all()
     serializer_class = BookingPreferenceSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 # ----------------------
@@ -111,10 +135,11 @@ class ClientBookingsView(generics.RetrieveAPIView):
     """
     Returns a client along with all their bookings
     """
-
-    queryset = Client.objects.all()
     serializer_class = ClientBookingsSerializer
-    permission_classes = [permissions.AllowAny]
-    lookup_field = "id"  # use client ID to fetch bookings
+    permission_classes = [permissions.IsAuthenticated]
 
-
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "photographer"):
+            return ClientTag.objects.filter(photographer=user.photographer)
+        return ClientTag.objects.none()

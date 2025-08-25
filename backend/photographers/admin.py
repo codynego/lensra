@@ -9,4 +9,8 @@ class PhotographerAdmin(admin.ModelAdmin):
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'notes')
+    list_display = ['name', 'email', 'get_phone', 'photographer']
+
+    def get_phone(self, obj):
+        return getattr(obj.user, 'phone', None)
+    get_phone.short_description = "Phone"
