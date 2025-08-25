@@ -12,6 +12,8 @@ from .serializers import (
     BookingCreateSerializer,
     BookingPreferenceSerializer,
     ClientBookingsSerializer,
+    GuestBookingCreateSerializer,
+    
 )
 
 
@@ -143,3 +145,14 @@ class ClientBookingsView(generics.RetrieveAPIView):
         if hasattr(user, "photographer"):
             return ClientTag.objects.filter(photographer=user.photographer)
         return ClientTag.objects.none()
+
+
+# ----------------------
+# 📌 Guest Booking Create View
+# ----------------------
+class GuestBookingCreateView(generics.CreateAPIView):
+    serializer_class = GuestBookingCreateSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def perform_create(self, serializer):
+        serializer.save()

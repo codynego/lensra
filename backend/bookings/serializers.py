@@ -4,6 +4,7 @@ from photographers.models import Photographer, Client as ClientTag
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 import datetime
+import uuid
 
 User = get_user_model()
 
@@ -203,3 +204,87 @@ class ClientBookingsSerializer(serializers.ModelSerializer):
             "created_at",
             "bookings",
         ]
+
+
+
+# ----------------------
+# 📌 Guest Client Serializer
+# ----------------------
+class GuestClientSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100, allow_blank=True)
+    email = serializers.EmailField()
+    phone = serializers.CharField(max_length=20, allow_blank=True, required=False)
+    notes = serializers.CharField(allow_blank=True, required=False)
+
+    def create(self, validated_data):
+        """
+        Ensure User + Client exist for a guest booking.
+        """
+        email = validated_data["email"]
+        photographer = self.context["photographer"]
+
+        # 1. Check if user exists
+        user, created_user = User.objects.get_or_create(
+            email=email,
+            defaults={
+                "username": validated_data.get("first_name", f"guest_{uuid.uuid4().hex[:8]}"),
+                "first_name": validated_data.get("first_name", ""),
+                "last_name": validated_data.get("last_name", ""),
+            },
+        )
+
+        # 2. Get or create client for this photographer
+        client_tag, created_client = ClientTag.objects.get_or_create(
+            photographer=photographer,
+            user=user,
+            defaults={"notes": validated_data.get("notes", "")},
+        )
+
+        # Update client notes if provided
+        if validated_data.get("notes"):
+            client_tag.notes = validated_data["notes"]
+            client_tag.save(update_fields=["notes"])
+
+        return client_tag
+
+
+# ----------------------
+# 📌 Guest Booking Create Serializer
+# ----------------------
+class GuestBookingCreateSerializer(serializers.ModelSerializer):
+    client = GuestClientSerializer(write_only=True)
+    photographer = serializers.PrimaryKeyRelatedField(queryset=Photographer.objects.all())
+    service_package = serializers.PrimaryKeyRelatedField(
+        queryset=ServicePackage.objects.filter(is_active=True)
+    )
+
+    class Meta:
+        model = Booking
+        fields = [
+            "photographer",
+            "service_package",
+            "session_date",
+            "session_time",
+            "notes",
+            "package_price",
+            "client",
+        ]
+
+    def create(self, validated_data):
+        client_data = validated_data.pop("client")
+        photographer = validated_data["photographer"]
+
+        # Create/retrieve User + Client
+        guest_serializer = GuestClientSerializer(data=client_data, context={"photographer": photographer})
+        guest_serializer.is_valid(raise_exception=True)
+        client = guest_serializer.save()
+
+        # Set defaults
+        if not validated_data.get("package_price"):
+            validated_data["package_price"] = validated_data["service_package"].price
+
+        validated_data["client"] = client
+        validated_data["status"] = Booking.STATUS_PENDING
+
+        return Booking.objects.create(**validated_data)

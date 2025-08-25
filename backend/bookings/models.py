@@ -110,7 +110,7 @@ class Booking(models.Model):
 # ----------------------
 class BookingPreference(models.Model):
     photographer = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="booking_preference"
+        Photographer, on_delete=models.CASCADE, related_name="booking_preference"
     )
 
     # Availability
