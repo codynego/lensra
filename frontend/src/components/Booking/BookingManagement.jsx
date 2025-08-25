@@ -22,8 +22,7 @@ import {
 import { useAuth } from '../../AuthContext';
 import BookingCard from './BookingCard';
 import BookingDetails from './BookingDetails';
-import * as dateUtils from '../../utils/dateUtils'; // Correct named imports
-import { set } from 'date-fns';
+import * as dateUtils from '../../utils/dateUtils';
 
 // Constants
 const BOOKING_STATUS = {
@@ -118,7 +117,6 @@ const formatTime = (date) => {
     return 'N/A';
   }
 };
-
 
 const formatCurrency = (value) => {
   const num = Number(value);
@@ -456,12 +454,19 @@ const BookingManagement = ({ theme = 'light' }) => {
     const filtered = bookingsArray
       .filter((booking) => {
         const matchesTab = tabConfig ? normalizeStatus(booking.status) === tabConfig.status : true;
+        // Safely handle booking.client
+        const clientName = typeof booking.client === 'string' 
+          ? booking.client 
+          : booking.client?.username || booking.client?.name || '';
         const matchesSearch =
-          booking.client?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (booking.client_email ? booking.client_email.toLowerCase().includes(searchTerm.toLowerCase()) : true);
+          (clientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+           (booking.client_email ? booking.client_email.toLowerCase().includes(searchTerm.toLowerCase()) : false));
         const matchesFilter = filterStatus === 'all' || normalizeStatus(booking.status) === filterStatus;
         console.log('Filtering Booking:', {
           bookingId: booking.id,
+          client: booking.client,
+          clientName,
+          clientEmail: booking.client_email,
           status: booking.status,
           normalizedStatus: normalizeStatus(booking.status),
           matchesTab,
@@ -480,7 +485,9 @@ const BookingManagement = ({ theme = 'light' }) => {
           case 'price':
             return (Number(b.package_price) || 0) - (Number(a.package_price) || 0);
           case 'client':
-            return (a.client || '').localeCompare(b.client || '');
+            const clientA = typeof a.client === 'string' ? a.client : a.client?.username || a.client?.name || '';
+            const clientB = typeof b.client === 'string' ? b.client : b.client?.username || b.client?.name || '';
+            return clientA.localeCompare(clientB);
           default:
             return 0;
         }
@@ -715,8 +722,14 @@ const BookingManagement = ({ theme = 'light' }) => {
                         {filteredBookings.map((booking) => {
                           const sessionDateTime = dateUtils.createDateTime(booking.session_date, booking.session_time);
                           const endDateTime = dateUtils.addHours(sessionDateTime, 1);
+                          const clientName = typeof booking.client === 'string' 
+                            ? booking.client 
+                            : booking.client?.username || booking.client?.name || 'Unknown Client';
                           console.log('Table Booking Debug:', {
                             id: booking.id,
+                            client: booking.client,
+                            clientName,
+                            clientEmail: booking.client_email,
                             session_date: booking.session_date,
                             session_time: booking.session_time,
                             sessionDateTime,
@@ -728,7 +741,7 @@ const BookingManagement = ({ theme = 'light' }) => {
                             <tr key={booking.id}>
                               <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
                                 <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  {booking.client || 'Unknown Client'}
+                                  {clientName}
                                 </span>
                               </td>
                               <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 truncate max-w-xs" title={booking.client_email}>
@@ -751,7 +764,7 @@ const BookingManagement = ({ theme = 'light' }) => {
                                       setSelectedBooking(booking);
                                     }}
                                     className={`text-indigo-600 hover:text-indigo-800 ${isDark ? 'hover:text-indigo-400' : ''}`}
-                                    aria-label={`View details for ${booking.client || 'Unknown Client'} booking`}
+                                    aria-label={`View details for ${clientName} booking`}
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
